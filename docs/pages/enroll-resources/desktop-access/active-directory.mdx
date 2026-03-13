@@ -851,6 +851,81 @@ domain, you would do the following:
 With this configuration, Teleport will generate certificates for users in
 `dev.example.com`, but it will publish its CA and CRLs to `example.com`.
 
+
+## Cross-Domain Login
+
+As of Teleport v17.x.y and v18.x.y, Windows Desktop Service supports logins for users outside
+of a given `windows_desktop_service` instance's configured domain, so long as there is an outgoing trust
+relationship from the primary (Teleport configured) domain to user's domain. Following the example
+above where Teleport is configured against the root domain `example.com` and there exists child domain,
+`dev.example.com`, Teleport can authenticate the user `user@dev.example.com` for logon to a desktop in
+the root domain. Similarly, `example.com` could be configured with an outgoing trust relationship to an
+external domain `partner.com` to allow its users to access desktops in `example.com`.
+
+#### Grant Remote Desktop Access to External Users
+
+1. Open the `Teleport Access Policy` group policy object in the
+   group policy editor.
+
+1. Expand **`Computer Configuration > Policies > Windows Settings > Security Settings > Local Policies > User Rights Assignment`**
+
+1. Double click  **Allow logon through remote desktop services**
+
+1. Under **Security Policy Setting** click **Add User Or Group** then click **Browse**.
+
+1. Type in the names of the users and/or groups for which you wish to grant access to desktops in this domain.
+
+Users must be added to the correct groups (to be continued)
+
+#### Add External Users to the 'Remote Desktop Users' AD Group
+
+1. Open **Active Directory Users and Computers** 
+
+1. Navigate to **`$YOUR_DOMAIN -> Builtin`** and double click **Remote Desktop Users**
+
+1. Select the **Members** tab and click **Add**
+
+1. Type in the names of the users and/or groups for which you wish to grant access to desktops in this domain.
+
+
+External domain trusts require additional LDAPs configuration
+In order to authenticate users across domains, Teleport's LDAPS client must follow a
+referral chain until it reaches a domain controller for the domain in which the user belongs.
+If the user belongs to a child domain of the Teleport configured domain, LDAPS authentication works
+without further configuration because the child domain is enrolled in the same forest-wide PKI heirarchy
+as the root domain. This is not the case if the user belongs to another forest.
+
+In order to authenticate users from another forest, Teleport must be configured to trust
+
+When logging in users from child domains this typically works without
+additional configuration because child domains trust the PKI of the parent domain. This
+is typically not the case for trusted domains in another forest, and LDAPS authentication will fail unless
+both Teleport and the target domain are configured with the appropriate trust relationship.
+
+Repeat steps [3/7](#step-37-configure-a-gpo-to-allow-teleport-connections) above for the external domain to import Teleport's CA certificate into the external forest domain.
+Additionally, repeat step 5/7 to export the LDAP CA certificate for this domain. Multiple CA certificates can be
+written to the `ldap_ca_cert` configuration field.
+
+  ```yaml
+  windows_desktop_service:
+    enabled: true
+    
+    ldap:
+      addr: example.com:636
+      username: 'DEV\svc-teleport'
+
+      insecure_skip_verify: false
+      # configure Teleport to trust multiple LDAP servers
+      ldap_ca_cert: |
+         -----BEGIN CERTIFICATE-----
+         ... LDAPS ceert for example.com ...
+         -----END CERTIFICATE-----
+         -----BEGIN CERTIFICATE-----
+         ... LDAPS cert for partner.com ...
+         -----END CERTIFICATE-----
+```
+
+
 ## Network Level Authentication (NLA)
 
 With Teleport 16.2.0 and later, you can configure `windows_desktop_service` to
