@@ -2926,3 +2926,12 @@ func (m *RetrievalModelDelete) TrimToMaxSize(_ int) AuditEvent {
 func (m *SessionSummarized) TrimToMaxSize(_ int) AuditEvent {
 	return m
 }
+
+func (m *CertAuthorityOverrideEvent) TrimToMaxSize(maxSize int) AuditEvent {
+	return trimEventToMaxSize(m, maxSize, func(m, out *CertAuthorityOverrideEvent) fieldTrimmer {
+		return fieldTrimmers{
+			newStrTrimmer(m.Status.Error, &out.Status.Error),
+			newStrTrimmer(m.Status.UserMessage, &out.Status.UserMessage),
+		}
+	})
+}
