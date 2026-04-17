@@ -118,6 +118,7 @@ type Config struct {
 	RecordingEncryption     services.RecordingEncryption
 	WorkloadClusterService  services.WorkloadClusterService
 	Summarizer              services.Summarizer
+	SubCAService            services.SubCAServiceGetter
 }
 
 func (c *Config) CheckAndSetDefaults() error {
@@ -207,6 +208,7 @@ func NewCache(cfg Config) (*cache.Cache, error) {
 		RecordingEncryption:     cfg.RecordingEncryption,
 		WorkloadClusterService:  cfg.WorkloadClusterService,
 		Summarizer:              cfg.Summarizer,
+		SubCAService:            cfg.SubCAService,
 	}
 
 	return cache.New(cfg.Setup(cacheCfg))
