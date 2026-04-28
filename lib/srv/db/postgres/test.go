@@ -647,10 +647,14 @@ func (s *TestServer) handleDeactivateUser(client *pgproto3.Backend, sendDeleteRe
 	if err != nil {
 		return trace.Wrap(err)
 	}
+	parameterOIDs := []uint32{pgtype.VarcharOID}
+	if sendDeleteResponse {
+		parameterOIDs = []uint32{pgtype.VarcharOID, pgtype.VarcharOID, pgtype.VarcharOID}
+	}
 	// Respond to Parse message.
 	err = s.sendMessages(client,
 		&pgproto3.ParseComplete{},
-		&pgproto3.ParameterDescription{ParameterOIDs: []uint32{pgtype.VarcharOID}},
+		&pgproto3.ParameterDescription{ParameterOIDs: parameterOIDs},
 		&pgproto3.NoData{},
 		&pgproto3.ReadyForQuery{})
 	if err != nil {
@@ -665,6 +669,22 @@ func (s *TestServer) handleDeactivateUser(client *pgproto3.Backend, sendDeleteRe
 	name, err := getVarchar(bind.ParameterFormatCodes[0], bind.Parameters[0])
 	if err != nil {
 		return trace.Wrap(err)
+	}
+	// Extract admin_user for delete operations.
+	admin_user := ""
+	if sendDeleteResponse {
+		admin_user, err = getVarchar(bind.ParameterFormatCodes[1], bind.Parameters[1])
+		if err != nil {
+			return trace.Wrap(err)
+		}
+	}
+	// Extract orphaned_resource_owner for delete operations.
+	orphaned_resource_owner := ""
+	if sendDeleteResponse {
+		orphaned_resource_owner, err = getVarchar(bind.ParameterFormatCodes[2], bind.Parameters[2])
+		if err != nil {
+			return trace.Wrap(err)
+		}
 	}
 	// Expect Execute message.
 	_, err = s.receiveExecuteMessage(client)
@@ -698,7 +718,11 @@ func (s *TestServer) handleDeactivateUser(client *pgproto3.Backend, sendDeleteRe
 		return trace.Wrap(err)
 	}
 	// Mark the user as active.
-	s.log.DebugContext(context.Background(), "Deactivated user.", "user", name)
+	if sendDeleteResponse {
+		s.log.DebugContext(context.Background(), "Deactivated user.", "user", name, "admin_user", admin_user, "orphaned_resource_owner", orphaned_resource_owner)
+	} else {
+		s.log.DebugContext(context.Background(), "Deactivated user.", "user", name)
+	}
 	s.userEventsCh <- UserEvent{Name: name, Active: false}
 	s.allowedUsers.Delete(name)
 	return nil
