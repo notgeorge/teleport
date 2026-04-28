@@ -241,6 +241,7 @@ mysql: # [...]
 admin_user: # [...]
 mongo_atlas: # [...]
 oracle: # [...]
+orphaned_resource_owner: "string"
 ```
 
 |Field Name|Description|Type|
@@ -255,6 +256,7 @@ oracle: # [...]
 |mongo_atlas|Contains Atlas metadata about the database.|[Mongo Atlas](#mongo-atlas)|
 |mysql|An additional section with MySQL database options.|[MySQL Options](#mysql-options)|
 |oracle|An additional Oracle configuration options.|[Oracle Options](#oracle-options)|
+|orphaned_resource_owner|The database user to transfer resource ownership to at the end of a session where the database user was auto-provisioned.  If the role that was used to log into the database has create_db_user_mode set to best_effort_drop, and OrphanedResourceOwner is not empty, Teleport will attempt to reassign all database objects owned by the user to the user specified by OrphanedResourceOwner prior to dropping the logged-in user.  OrphanedResourceOwner is ignored when create_db_user_mode has a value other than best_effort_drop.|string|
 |protocol|The database protocol: postgres, mysql, mongodb, etc.|string|
 |tls|The TLS configuration used when establishing connection to target database. Allows to provide custom CA cert or override server name.|[Database TLS](#database-tls)|
 |uri|The database connection endpoint.|string|

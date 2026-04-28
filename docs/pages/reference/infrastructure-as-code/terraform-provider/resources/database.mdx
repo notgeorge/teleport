@@ -84,6 +84,7 @@ Optional:
 - `mongo_atlas` (Attributes) MongoAtlas contains Atlas metadata about the database. (see [below for nested schema](#nested-schema-for-specmongo_atlas))
 - `mysql` (Attributes) MySQL is an additional section with MySQL database options. (see [below for nested schema](#nested-schema-for-specmysql))
 - `oracle` (Attributes) Oracle is an additional Oracle configuration options. (see [below for nested schema](#nested-schema-for-specoracle))
+- `orphaned_resource_owner` (String) OrphanedResourceOwner is the database user to transfer resource ownership to at the end of a session where the database user was auto-provisioned.  If the role that was used to log into the database has create_db_user_mode set to best_effort_drop, and OrphanedResourceOwner is not empty, Teleport will attempt to reassign all database objects owned by the user to the user specified by OrphanedResourceOwner prior to dropping the logged-in user.  OrphanedResourceOwner is ignored when create_db_user_mode has a value other than best_effort_drop.
 - `tls` (Attributes) TLS is the TLS configuration used when establishing connection to target database. Allows to provide custom CA cert or override server name. (see [below for nested schema](#nested-schema-for-spectls))
 
 ### Nested Schema for `spec.ad`

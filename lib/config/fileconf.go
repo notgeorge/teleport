@@ -2215,6 +2215,17 @@ type Database struct {
 	AdminUser DatabaseAdminUser `yaml:"admin_user"`
 	// Oracle is Database Oracle settings
 	Oracle DatabaseOracle `yaml:"oracle,omitempty"`
+	// OrphanedResourceOwner is the database user to transfer resource ownership
+	// to at the end of a session where the database user was auto-provisioned.
+	//
+	// If the role that was used to log into the database has create_db_user_mode
+	// set to best_effort_drop, and OrphanedResourceOwner is not empty, Teleport will
+	// attempt to reassign all database objects owned by the user to the user
+	// specified by OrphanedResourceOwner prior to dropping the logged-in user.
+	//
+	// OrphanedResourceOwner is ignored when create_db_user_mode has a value other
+	// than best_effort_drop.
+	OrphanedResourceOwner string `yaml:"orphaned_resource_owner"`
 }
 
 // DatabaseAdminUser describes database privileged user for auto-provisioning.

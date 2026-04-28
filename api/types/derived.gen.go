@@ -608,7 +608,8 @@ func deriveTeleportEqual_18(this, that *DatabaseSpecV3) bool {
 			deriveTeleportEqual_55(&this.MySQL, &that.MySQL) &&
 			deriveTeleportEqual_56(this.AdminUser, that.AdminUser) &&
 			deriveTeleportEqual_57(&this.MongoAtlas, &that.MongoAtlas) &&
-			deriveTeleportEqual_58(&this.Oracle, &that.Oracle)
+			deriveTeleportEqual_58(&this.Oracle, &that.Oracle) &&
+			this.OrphanedResourceOwner == that.OrphanedResourceOwner
 }
 
 // deriveTeleportEqual_19 returns whether this and that are equal.
