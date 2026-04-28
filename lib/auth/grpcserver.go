@@ -1644,6 +1644,14 @@ func (g *GRPCServer) UpsertApplicationServer(ctx context.Context, req *authpb.Up
 		}
 	}
 
+	// Normalize mixed-case names and URL-shaped public_addr values from
+	// older agents so heartbeats survive a rolling upgrade. Admin paths
+	// (CreateApp, UpdateApp) reject these instead so admins do not
+	// silently retarget an existing record. The inventory control
+	// stream calls the same helper so the storage key matches what the
+	// cache later sees on keepalive.
+	services.NormalizeAppServerForHeartbeat(server)
+
 	if err := services.ValidateApp(app, auth); err != nil {
 		return nil, trace.Wrap(err)
 	}

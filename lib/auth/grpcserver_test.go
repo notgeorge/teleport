@@ -5762,6 +5762,39 @@ func TestUpsertApplicationServerOrigin(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestApplicationServerHeartbeatLowercase covers the heartbeat path
+// at the gRPC boundary, proving UpsertApplicationServer plumbs
+// NormalizeAppServerForHeartbeat and ValidateApp together so an older
+// agent's mixed-case name lands lowercased on both the inner app and
+// outer AppServer storage key. The unit-test layer in
+// lib/services/app_test.go covers the helper itself and the
+// admin-path rejection of mixed-case names.
+func TestApplicationServerHeartbeatLowercase(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	server := newTestTLSServer(t)
+	admin := authtest.TestAdmin()
+	client, err := server.NewClient(admin)
+	require.NoError(t, err)
+
+	app, err := types.NewAppV3(types.Metadata{Name: "MixedCaseApp"}, types.AppSpecV3{
+		URI: "http://localhost:8080",
+	})
+	require.NoError(t, err)
+	appServer, err := types.NewAppServerV3FromApp(app, "localhost", "host-id")
+	require.NoError(t, err)
+
+	_, err = client.UpsertApplicationServer(ctx, appServer)
+	require.NoError(t, err)
+
+	stored, err := client.GetApplicationServers(ctx, apidefaults.Namespace)
+	require.NoError(t, err)
+	require.Len(t, stored, 1)
+	require.Equal(t, "mixedcaseapp", stored[0].GetApp().GetName())
+	require.Equal(t, "mixedcaseapp", stored[0].GetName())
+}
+
 func TestGetAccessGraphConfig(t *testing.T) {
 	t.Parallel()
 

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -187,6 +188,189 @@ func TestValidateApp(t *testing.T) {
 	}
 }
 
+func TestValidateAppName(t *testing.T) {
+	proxyGetter := &mockProxyGetter{addrs: []string{"proxy.example.com:443"}}
+
+	makeApp := func(t *testing.T, name string) types.Application {
+		t.Helper()
+		app, err := types.NewAppV3(types.Metadata{Name: name}, types.AppSpecV3{URI: "http://localhost:8080"})
+		require.NoError(t, err)
+		return app
+	}
+
+	tests := []struct {
+		name    string
+		appName string
+		wantErr string
+	}{
+		{name: "valid lowercase", appName: "myapp"},
+		{name: "valid with hyphen", appName: "my-app"},
+		{name: "valid leading digit", appName: "1stapp"},
+		{name: "valid all digits", appName: "123"},
+		{name: "valid dotted name", appName: "env.prod"},
+		{name: "reject uppercase", appName: "MyApp", wantErr: "must be a valid DNS name"},
+		{name: "reject underscore", appName: "my_app", wantErr: "must be a valid DNS name"},
+		{name: "reject trailing hyphen", appName: "foo-", wantErr: "must be a valid DNS name"},
+		{name: "accept 63-char label", appName: strings.Repeat("a", 63)},
+		{name: "reject too long", appName: strings.Repeat("a", 254), wantErr: "must be a valid DNS name"},
+		{name: "accept single char", appName: "a"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := makeApp(t, tt.appName)
+			err := ValidateApp(app, proxyGetter)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateAppLowercasesRequiredAppNames(t *testing.T) {
+	proxyGetter := &mockProxyGetter{addrs: []string{"proxy.example.com:443"}}
+	app, err := types.NewAppV3(types.Metadata{Name: "myapp"}, types.AppSpecV3{
+		URI:              "http://localhost:8080",
+		RequiredAppNames: []string{"AnotherApp", "already-lower"},
+	})
+	require.NoError(t, err)
+	require.NoError(t, ValidateApp(app, proxyGetter))
+	require.Equal(t, []string{"anotherapp", "already-lower"}, app.GetRequiredAppNames())
+}
+
+func TestValidateAppPublicAddr(t *testing.T) {
+	proxyGetter := &mockProxyGetter{addrs: []string{"proxy.example.com:443"}}
+
+	makeApp := func(t *testing.T, publicAddr string) types.Application {
+		t.Helper()
+		app, err := types.NewAppV3(types.Metadata{Name: "app"}, types.AppSpecV3{URI: "http://localhost:8080", PublicAddr: publicAddr})
+		require.NoError(t, err)
+		return app
+	}
+
+	tests := []struct {
+		name    string
+		addr    string
+		wantErr string
+	}{
+		{name: "bare hostname", addr: "app.example.com"},
+		{name: "reject scheme http", addr: "http://foo.bar", wantErr: "must not contain a URI scheme"},
+		{name: "reject scheme https with port", addr: "https://foo.bar:443", wantErr: "must not contain a URI scheme"},
+		{name: "reject port", addr: "foo.bar:443", wantErr: "must not contain a port"},
+		{name: "reject IPv4", addr: "192.168.1.1", wantErr: "must not be an IP address"},
+		// Bare ::1 lacks brackets so SplitHostPort skips it; ParseIP
+		// catches it.
+		{name: "reject bare IPv6", addr: "::1", wantErr: "must not be an IP address"},
+		// [::1] exercises the bracket-strip branch.
+		{name: "reject bracketed IPv6", addr: "[::1]", wantErr: "must not be an IP address"},
+		// mailto:user@host trips the @-userinfo check.
+		{name: "reject mailto opaque", addr: "mailto:victim@example.com", wantErr: "must be a bare hostname"},
+		// These would pass utils.ParseAddr and persist a bad hostname.
+		{name: "reject path", addr: "app.example.com/path", wantErr: "must be a bare hostname"},
+		{name: "reject query", addr: "app.example.com?x=y", wantErr: "must be a bare hostname"},
+		{name: "reject fragment", addr: "app.example.com#frag", wantErr: "must be a bare hostname"},
+		{name: "reject userinfo", addr: "user@app.example.com", wantErr: "must be a bare hostname"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := makeApp(t, tt.addr)
+			err := ValidateApp(app, proxyGetter)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNormalizeAppServerForHeartbeat(t *testing.T) {
+	makeServer := func(t *testing.T, outerName, innerName string) *types.AppServerV3 {
+		t.Helper()
+		app, err := types.NewAppV3(types.Metadata{Name: innerName}, types.AppSpecV3{
+			URI: "http://localhost:8080",
+		})
+		require.NoError(t, err)
+		srv, err := types.NewAppServerV3FromApp(app, "localhost", "host-id")
+		require.NoError(t, err)
+		srv.Metadata.Name = outerName
+		return srv
+	}
+
+	tests := []struct {
+		name          string
+		outerName     string
+		innerName     string
+		wantOuterName string
+		wantInnerName string
+	}{
+		{
+			name:          "both lowercase unchanged",
+			outerName:     "myapp",
+			innerName:     "myapp",
+			wantOuterName: "myapp",
+			wantInnerName: "myapp",
+		},
+		{
+			name:          "both mixed-case lowercased together",
+			outerName:     "MyApp",
+			innerName:     "MyApp",
+			wantOuterName: "myapp",
+			wantInnerName: "myapp",
+		},
+		{
+			// Older agents lowercased only one of the two; case-fold
+			// match catches this.
+			name:          "outer mixed-case inner lowercase",
+			outerName:     "MyApp",
+			innerName:     "myapp",
+			wantOuterName: "myapp",
+			wantInnerName: "myapp",
+		},
+		{
+			// True mismatch must remain so it surfaces downstream
+			// rather than being silently rewritten in only one place.
+			name:          "true mismatch left unchanged",
+			outerName:     "different",
+			innerName:     "myapp",
+			wantOuterName: "different",
+			wantInnerName: "myapp",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := makeServer(t, tt.outerName, tt.innerName)
+			NormalizeAppServerForHeartbeat(srv)
+			require.Equal(t, tt.wantOuterName, srv.GetName())
+			require.Equal(t, tt.wantInnerName, srv.GetApp().GetName())
+		})
+	}
+}
+
+func TestNormalizeHeartbeatPublicAddr(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty unchanged", input: "", want: ""},
+		{name: "bare hostname unchanged", input: "app.example.com", want: "app.example.com"},
+		{name: "scheme and path stripped", input: "https://app.example.com/start", want: "app.example.com"},
+		{name: "scheme path and port stripped", input: "https://app.example.com:443/path", want: "app.example.com"},
+		{name: "trailing port stripped", input: "app.example.com:443", want: "app.example.com"},
+		// IPs cannot be normalized; ValidateApp rejects them next.
+		{name: "bare IPv6 returned as-is", input: "::1", want: "::1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, normalizeHeartbeatPublicAddr(tt.input))
+		})
+	}
+}
+
 // mockProxyGetter is a test implementation of ProxyGetter.
 type mockProxyGetter struct {
 	addrs []string
@@ -338,6 +522,21 @@ func TestGetAppName(t *testing.T) {
 			portName:    "http",
 			annotation:  "overridden*name",
 			wantErr:     "s",
+		},
+		{
+			serviceName: "service4",
+			namespace:   "ns4",
+			clusterName: "cluster4",
+			annotation:  "1stapp",
+			expected:    "1stapp",
+		},
+		{
+			// Mixed-case discovery_group must lowercase so the composed
+			// name passes services.ValidateApp on the write path.
+			serviceName: "service5",
+			namespace:   "ns5",
+			clusterName: "MyGroup",
+			expected:    "service5-ns5-mygroup",
 		},
 	}
 

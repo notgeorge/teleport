@@ -18,6 +18,7 @@ package utils
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/gravitational/teleport/api/types"
 )
@@ -38,8 +39,12 @@ func AssembleAppFQDN(localClusterName string, localProxyDNSName string, appClust
 	return DefaultAppPublicAddr(app.GetName(), localProxyDNSName)
 }
 
-// DefaultAppPublicAddr returns the default publicAddr for an app.
-// Format: <appName>.<localProxyDNSName>
+// DefaultAppPublicAddr returns "<appName>.<localProxyDNSName>".
+// A trailing port on localProxyDNSName is stripped because public
+// addresses must be bare hostnames.
 func DefaultAppPublicAddr(appName, localProxyDNSName string) string {
+	if host, _, err := net.SplitHostPort(localProxyDNSName); err == nil {
+		localProxyDNSName = host
+	}
 	return fmt.Sprintf("%v.%v", appName, localProxyDNSName)
 }

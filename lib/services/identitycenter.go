@@ -19,6 +19,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/gravitational/trace"
 
@@ -243,20 +245,37 @@ func IdentityCenterAccountToAppServer(acct *identitycenterv1.Account) *types.App
 		}
 	}
 
+	// StartUrl is usually a full URL; url.Hostname() yields the bare
+	// hostname required by downstream cert-SAN derivation.
+	publicAddr := acct.Spec.StartUrl
+	if u, err := url.Parse(publicAddr); err == nil && u.Hostname() != "" {
+		publicAddr = u.Hostname()
+	}
+	// DNS hostnames are case-insensitive by spec but downstream
+	// proxy-collision matching is case-sensitive.
+	publicAddr = strings.ToLower(publicAddr)
+
+	// Lowercase the metadata name so it passes ValidateApp; AWS
+	// Identity Center accounts can be mixed-case. Apply to both outer
+	// (storage key) and inner (routing identity) metadata so they
+	// stay aligned.
+	metadata := types.Metadata153ToLegacy(acct.Metadata)
+	metadata.Name = strings.ToLower(metadata.Name)
+
 	appServer := &types.AppServerV3{
 		Kind:     types.KindAppServer,
 		SubKind:  types.KindIdentityCenterAccount,
 		Version:  types.V3,
-		Metadata: types.Metadata153ToLegacy(acct.Metadata),
+		Metadata: metadata,
 		Spec: types.AppServerSpecV3{
 			App: &types.AppV3{
 				Kind:     types.KindApp,
 				SubKind:  types.KindIdentityCenterAccount,
 				Version:  types.V3,
-				Metadata: types.Metadata153ToLegacy(acct.Metadata),
+				Metadata: metadata,
 				Spec: types.AppSpecV3{
 					URI:        acct.Spec.StartUrl,
-					PublicAddr: acct.Spec.StartUrl,
+					PublicAddr: publicAddr,
 					AWS: &types.AppAWS{
 						ExternalID: acct.Spec.Id,
 					},
