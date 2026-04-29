@@ -56,6 +56,10 @@ type iterateConfig struct {
 	latestDeltaQuery bool
 	// deltaQuery indicates to use delta query.
 	deltaQuery bool
+	// withoutTop indicates to make API request without the $top query,
+	// which is added by default. Endpoints such as Graph delta API do not
+	// support the $top query and risk breaking the request.
+	withoutTop bool
 }
 
 func (ic *iterateConfig) query() url.Values {
@@ -63,7 +67,7 @@ func (ic *iterateConfig) query() url.Values {
 	if ic.filter != "" {
 		q.Set("$filter", ic.filter)
 	}
-	if ic.top > 0 {
+	if ic.top > 0 && !ic.withoutTop {
 		q.Set("$top", strconv.Itoa(ic.top))
 	}
 	if ic.selector != "" {
@@ -102,6 +106,15 @@ func WithDeltaQuery() IterateOpt {
 func WithLatestDeltaQuery() IterateOpt {
 	return func(ic *iterateConfig) {
 		ic.latestDeltaQuery = true
+	}
+}
+
+// WithoutTop sets [iterateConfig.withoutTop],
+// indicating the client to not to use the
+// default $top query.
+func WithoutTop() IterateOpt {
+	return func(ic *iterateConfig) {
+		ic.withoutTop = true
 	}
 }
 
@@ -311,7 +324,9 @@ func (c *Client) IterateUserDeltas(
 	ds DeltaStore,
 	opts ...IterateOpt,
 ) iter.Seq2[*models.ListUsersDeltaResponse, error] {
-	opts = append(opts, WithDeltaQuery())
+	// SetupLatestDelta should have setup the delta query without the $top
+	// query. WithoutTop() is added here only as an additional check.
+	opts = append(opts, WithDeltaQuery(), WithoutTop())
 	return func(yield func(*models.ListUsersDeltaResponse, error) bool) {
 		for msg, iterErr := range c.iterateSeq(ctx, endpoint, ds, opts...) {
 			if iterErr != nil {
@@ -343,7 +358,9 @@ func (c *Client) IterateGroupDeltas(
 	ds DeltaStore,
 	opts ...IterateOpt,
 ) iter.Seq2[*models.ListGroupsDeltaResponse, error] {
-	opts = append(opts, WithDeltaQuery())
+	// SetupLatestDelta should have setup the delta query without the $top
+	// query. WithoutTop() is added here only as an additional check.
+	opts = append(opts, WithDeltaQuery(), WithoutTop())
 	return func(yield func(*models.ListGroupsDeltaResponse, error) bool) {
 		for msg, iterErr := range c.iterateSeq(ctx, endpoint, ds, opts...) {
 			if iterErr != nil {
@@ -391,7 +408,9 @@ func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDel
 // SetupLatestDelta configures latest delta token for the given endpoint.
 // Should always be called before iterating over user and group delta API.
 func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) error {
-	opts = append(opts, WithLatestDeltaQuery())
+	// Delta API for user and group endpoint
+	// does not support $top query.
+	opts = append(opts, WithLatestDeltaQuery(), WithoutTop())
 
 	// only a single page with a new delta link is expected.
 	for _, err := range c.iterateSeq(ctx, endpoint, ds, opts...) {

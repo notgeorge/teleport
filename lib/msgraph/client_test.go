@@ -1157,3 +1157,61 @@ func mustParseURL(t *testing.T, in string) *url.URL {
 	require.Equal(t, "https", url.Scheme, "expected URL with https scheme")
 	return url
 }
+
+func TestDeltaMethodsWithoutTop(t *testing.T) {
+	ctx := t.Context()
+
+	fakeServer := msgraphtest.NewServer()
+
+	client, err := NewClient(Config{
+		HTTPClient:    newHTTPClient(fakeServer.TLSServer),
+		TokenProvider: &fakeTokenProvider{},
+		RetryConfig:   &retryConfig,
+		PageSize:      500, // pagesize added to ensure that the default $top query path is reached wihout the WithoutTop() option.
+	})
+	require.NoError(t, err)
+
+	assertNoTop := func(t *testing.T, uri string) {
+		t.Helper()
+		parsed, err := url.ParseRequestURI(uri)
+		if err != nil {
+			t.Fatalf("failed to parse delta request URI %s: %v", uri, err)
+		}
+		if parsed.Query().Has("$top") {
+			t.Fatalf("expected $top query to be absent in delta API requests, received: %s", uri)
+		}
+	}
+
+	const userEndpoint = "users/delta"
+	const groupEndpoint = "users/delta"
+
+	deltaStore := msgraphtest.NewFakeDeltaStore()
+
+	t.Run("SetupLatestDelta", func(t *testing.T) {
+		err = client.SetupLatestDelta(ctx, userEndpoint, deltaStore)
+		require.NoError(t, err)
+		assertNoTop(t, deltaStore.Get(userEndpoint))
+
+		err = client.SetupLatestDelta(ctx, groupEndpoint, deltaStore)
+		require.NoError(t, err)
+		assertNoTop(t, deltaStore.Get(groupEndpoint))
+	})
+
+	t.Run("IterateUserDeltas", func(t *testing.T) {
+		// This test should pass by default as long as SetupLatestDelta sets up
+		// latest delta token without the $top query.
+		for _, err = range client.IterateUserDeltas(ctx, userEndpoint, deltaStore) {
+			require.NoError(t, err)
+		}
+		assertNoTop(t, deltaStore.Get(userEndpoint))
+	})
+
+	t.Run("IterateGroupDeltas", func(t *testing.T) {
+		// This test should pass by default as long as SetupLatestDelta sets up
+		// latest delta token without the $top query.
+		for _, err = range client.IterateGroupDeltas(ctx, groupEndpoint, deltaStore) {
+			require.NoError(t, err)
+		}
+		assertNoTop(t, deltaStore.Get(groupEndpoint))
+	})
+}
