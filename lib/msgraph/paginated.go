@@ -241,7 +241,8 @@ func (c *Client) IterateUsers(ctx context.Context, f func(*models.User) bool, op
 	return iterateSimple(c, ctx, "users", f, opts...)
 }
 
-// iterateSeq implements pagination for "list" endpoints and yields pages as a sequence.
+// iterateSeq implements pagination for "list" endpoints.
+// It supports working with Graph delta API.
 func (c *Client) iterateSeq(ctx context.Context, endpoint string, ds DeltaStore, iterateOpts ...IterateOpt) iter.Seq2[json.RawMessage, error] {
 	ic := c.newIterateConfig()
 	for _, opt := range iterateOpts {
@@ -302,7 +303,8 @@ func (c *Client) iterateSeq(ctx context.Context, endpoint string, ds DeltaStore,
 // IterateUsersDelta. If the delta cache is empty,
 // returns error if delta cache is empty, suggesting
 // to start with a full scan which sets up latest
-// delta token.
+// delta token. A delta token for the user endpont
+// must be set up before calling this method.
 func (c *Client) IterateUserDeltas(
 	ctx context.Context,
 	endpoint string,
@@ -333,7 +335,8 @@ func (c *Client) IterateUserDeltas(
 // IterateGroupsDelta. If the delta cache is empty,
 // returns error if delta cache is empty, suggesting
 // to start with a full scan which sets up latest
-// delta token.
+// delta token. A delta token for the group endpont
+// must be set up before calling this method.
 func (c *Client) IterateGroupDeltas(
 	ctx context.Context,
 	endpoint string,
@@ -362,21 +365,6 @@ func (c *Client) IterateGroupDeltas(
 	}
 }
 
-// SetupLatestDelta configures latest delta token for the given endpoint.
-// Should always be called before iterating over user and group delta API.
-func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) error {
-	opts = append(opts, WithLatestDeltaQuery())
-
-	// only a single page with a new delta link is expected.
-	for _, err := range c.iterateSeq(ctx, endpoint, ds, opts...) {
-		if err != nil {
-			return trace.Wrap(err, "setting up user latest delta token")
-		}
-	}
-
-	return nil
-}
-
 func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDelta {
 	if in == nil {
 		return nil
@@ -398,6 +386,21 @@ func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDel
 		}
 	}
 	return out
+}
+
+// SetupLatestDelta configures latest delta token for the given endpoint.
+// Should always be called before iterating over user and group delta API.
+func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) error {
+	opts = append(opts, WithLatestDeltaQuery())
+
+	// only a single page with a new delta link is expected.
+	for _, err := range c.iterateSeq(ctx, endpoint, ds, opts...) {
+		if err != nil {
+			return trace.Wrap(err, "setting up user latest delta token")
+		}
+	}
+
+	return nil
 }
 
 // IterateServicePrincipals lists all service principals in the Entra ID directory using pagination.

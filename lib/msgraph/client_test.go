@@ -884,8 +884,9 @@ func TestIterateUserDeltas(t *testing.T) {
 
 	ctx := t.Context()
 	defaultStorage := msgraphtest.NewDefaultStorage()
-	storage := msgraphtest.NewStorage()
 
+	// Seed storage with one user carol.
+	storage := msgraphtest.NewStorage()
 	carol := defaultStorage.Users[msgraphtest.CarolID]
 	storage.Users[*carol.ID] = carol
 
@@ -900,7 +901,6 @@ func TestIterateUserDeltas(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeDeltaStore := msgraphtest.NewFakeDeltaStore()
-
 	const userEndpoint = "users/delta"
 
 	// Request without the latest token should fail.
@@ -915,10 +915,16 @@ func TestIterateUserDeltas(t *testing.T) {
 	// Subsequent delta requests should now succeed.
 	require.NotEmpty(t, fakeDeltaStore.Get(userEndpoint))
 
+	sortDeltas := cmpopts.SortSlices(func(a, b *models.ListUsersDeltaResponse) bool {
+		return a.User.GetID() != nil &&
+			b.User.GetID() != nil &&
+			*a.User.GetID() < *b.User.GetID()
+	})
+
+	// Add alice and bob users.
 	alice := defaultStorage.Users[msgraphtest.AliceID]
 	bob := defaultStorage.Users[msgraphtest.BobID]
 	fakeServer.SetUsers([]*models.User{alice, bob})
-
 	expected := []*models.ListUsersDeltaResponse{
 		{
 			User: &models.User{
@@ -939,7 +945,6 @@ func TestIterateUserDeltas(t *testing.T) {
 			},
 		},
 	}
-
 	// Test new users response.
 	got := []*models.ListUsersDeltaResponse{}
 	for usersDelta, err := range client.IterateUserDeltas(ctx, userEndpoint, fakeDeltaStore) {
@@ -947,15 +952,10 @@ func TestIterateUserDeltas(t *testing.T) {
 
 		got = append(got, usersDelta)
 	}
-
-	sortDeltas := cmpopts.SortSlices(func(a, b *models.ListUsersDeltaResponse) bool {
-		return a.User.GetID() != nil &&
-			b.User.GetID() != nil &&
-			*a.User.GetID() < *b.User.GetID()
-	})
 	require.Empty(t, cmp.Diff(expected, got, sortDeltas), "expected user delta response to match")
 
 	// Test user delete response
+	fakeServer.DeleteUsers([]string{*carol.GetID()})
 	expected = []*models.ListUsersDeltaResponse{
 		{
 			User: &models.User{
@@ -968,8 +968,6 @@ func TestIterateUserDeltas(t *testing.T) {
 			},
 		},
 	}
-
-	fakeServer.DeleteUsers([]string{*carol.GetID()})
 	got = []*models.ListUsersDeltaResponse{}
 	for usersDelta, err := range client.IterateUserDeltas(ctx, userEndpoint, fakeDeltaStore) {
 		require.NoError(t, err)
@@ -978,7 +976,6 @@ func TestIterateUserDeltas(t *testing.T) {
 	}
 
 	require.Empty(t, cmp.Diff(expected, got, sortDeltas), "expected user delta response to match")
-
 }
 
 func TestIterateGroupDeltas(t *testing.T) {
@@ -987,8 +984,8 @@ func TestIterateGroupDeltas(t *testing.T) {
 	ctx := t.Context()
 	defaultStorage := msgraphtest.NewDefaultStorage()
 
-	storage := msgraphtest.NewStorage()
 	// Start with default users alice, bob and carol.
+	storage := msgraphtest.NewStorage()
 	storage.Users = defaultStorage.Users
 
 	fakeServer := msgraphtest.NewServer(msgraphtest.WithStorage(storage))
@@ -1023,16 +1020,20 @@ func TestIterateGroupDeltas(t *testing.T) {
 
 	require.NotEmpty(t, fakeDeltaStore.Get(endpoint))
 
+	sortDeltas := cmpopts.SortSlices(func(a, b *models.ListGroupsDeltaResponse) bool {
+		return a.Group.GetID() != nil &&
+			b.Group.GetID() != nil &&
+			*a.Group.GetID() < *b.Group.GetID()
+	})
+
 	// Create groups
 	group1 := defaultStorage.Groups[msgraphtest.Group1ID]
 	group2 := defaultStorage.Groups[msgraphtest.Group2ID]
 	group3 := defaultStorage.Groups[msgraphtest.Group3ID]
-
 	fakeServer.SetGroups([]*models.Group{group1, group2, group3})
 	// Add user alice and group3 as member
 	alice := storage.Users[msgraphtest.AliceID]
 	fakeServer.SetGroupMembers(*group1.GetID(), []models.GroupMember{alice, group3})
-
 	expected := []*models.ListGroupsDeltaResponse{
 		{
 			Group: &models.Group{
@@ -1076,21 +1077,12 @@ func TestIterateGroupDeltas(t *testing.T) {
 			},
 		},
 	}
-
 	got := []*models.ListGroupsDeltaResponse{}
-	// A consequtive request should now succeed
 	for groupDeltas, err := range client.IterateGroupDeltas(ctx, endpoint, fakeDeltaStore) {
 		require.NoError(t, err)
 
 		got = append(got, groupDeltas)
 	}
-
-	sortDeltas := cmpopts.SortSlices(func(a, b *models.ListGroupsDeltaResponse) bool {
-		return a.Group.GetID() != nil &&
-			b.Group.GetID() != nil &&
-			*a.Group.GetID() < *b.Group.GetID()
-	})
-
 	require.Empty(t, cmp.Diff(expected, got, sortDeltas), "expected group delta response to match")
 
 	fakeServer.DeleteGroups([]string{*group3.GetID()})
@@ -1098,7 +1090,6 @@ func TestIterateGroupDeltas(t *testing.T) {
 	// Add user alice and group3 as member
 	carol := storage.Users[msgraphtest.CarolID]
 	fakeServer.SetGroupOwners(*group1.GetID(), []*models.User{carol})
-
 	expected = []*models.ListGroupsDeltaResponse{
 		{
 			Group: &models.Group{
@@ -1149,9 +1140,7 @@ func TestIterateGroupDeltas(t *testing.T) {
 			},
 		},
 	}
-
 	got = []*models.ListGroupsDeltaResponse{}
-	// A consequtive request should now succeed
 	for groupDeltas, err := range client.IterateGroupDeltas(ctx, endpoint, fakeDeltaStore) {
 		require.NoError(t, err)
 
