@@ -26,14 +26,32 @@ message Pin {
   // conveyed by this pin.
   string scope = 1;
 
-  // assignments encodes the scoped role assignments relevant to access-control decisions about the pinned identity. This may
-  // include assignments to parents of the pinned scope as well as assignments to equivalent/child scopes. Effectively, this
-  // means all assignments that are not orthogonal to the pinned scope.
-  map<string, PinnedAssignments> assignments = 2 [deprecated = true];
+  PinKind kind = 2;
 
   // assignment_tree encodes the full tree of scoped privilege assignments, organized by *Scope of Origin*. Policies/privileges
-  // assigned from higher scopes of origin take precedence over those assigned from lower scopes of origin.
+  // assigned from higher scopes of origin take precedence over those assigned from lower scopes of origin. Only specified
+  // for USER kind pins.
   AssignmentNode assignment_tree = 3;
+
+  // system_roles encodes the system roles held by the pinned identity. Only specified for AGENT kind pins.
+  SystemRoles system_roles = 4;
+}
+
+enum PinKind {
+  // PIN_KIND_UNSPECIFIED indicates that no pin kind has been specified.
+  PIN_KIND_UNSPECIFIED = 0;
+
+  // PIN_KIND_USER indicates that the pin is associated with a user certificate/identity.
+  PIN_KIND_USER = 1;
+
+  // PIN_KIND_AGENT indicates that the pin is associated with an agent certificate/identity.
+  PIN_KIND_AGENT = 2;
+}
+
+// SystemRoles is a collection of system roles held by an agent identity.
+message SystemRoles {
+  string primary = 1;
+  repeated string additional = 2;
 }
 
 // AssignmentNode represents a node in the assignment tree. In addition to containing its own children as is standard for tree nodes,
@@ -60,6 +78,27 @@ message RoleNode {
 message PinnedAssignments {
   // roles is a list of scoped roles that are assigned to the pinned identity at the target scope.
   repeated string roles = 1;
+}
+
+// AgentPin identifies an agent certificate as being "pinned" to a target scope and encodes the agent's
+// system roles. Agent scope pinning is generally equivalent to user scope pinning, with access to resources
+// being constrained to the agent's pinned scope and its descendants. A notable exception to this parallel
+// is that agents need read access to various policy types in parent scopes in order to properly enforce
+// access controls, and so various configuration/policy types permit pinned agents read-only access to
+// the direct parents of their pinned scope.
+message AgentPin {
+  // scope is the scope that the agent is pinned to.
+  string scope = 1;
+
+  // system_role is the primary system role of the agent. For per-service certs this is the only role
+  // (e.g. Node, Proxy, etc). For instance certs, this is set to the Instance system role which does
+  // not convey any particular privileges, and instead the sum of the agent's system roles is conveyed
+  // via the additional_system_roles field.
+  string system_role = 2;
+
+  // additional_system_roles are additional system roles held by the agent. This is only populated
+  // for Instance certs, where it encodes all system roles held by the agent at the time of issuance.
+  repeated string additional_system_roles = 3;
 }
 
 // Mode determines the mode of scoping when a query specifies a scope. When a query specifies a scope,

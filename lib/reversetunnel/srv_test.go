@@ -195,7 +195,7 @@ func TestServerKeyAuth(t *testing.T) {
 						Username:   con.User(),
 						Principals: []string{con.User()},
 						Roles:      []string{"dev", "admin"},
-						ScopePin:   &scopesv1.Pin{Scope: "test"},
+						ScopePin:   &scopesv1.Pin{Kind: scopesv1.PinKind_PIN_KIND_USER, Scope: "test"},
 					},
 				})
 				require.NoError(t, err)

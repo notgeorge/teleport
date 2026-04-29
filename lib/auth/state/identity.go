@@ -31,11 +31,13 @@ import (
 	"github.com/gravitational/teleport/api/client/proto"
 	apidefaults "github.com/gravitational/teleport/api/defaults"
 	joiningv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/joining/v1"
+	scopesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/v1"
 	apissh "github.com/gravitational/teleport/api/ssh"
 	"github.com/gravitational/teleport/api/types"
 	apiutils "github.com/gravitational/teleport/api/utils"
 	"github.com/gravitational/teleport/api/utils/keys"
 	apisshutils "github.com/gravitational/teleport/api/utils/sshutils"
+	"github.com/gravitational/teleport/lib/scopes/pinning"
 	"github.com/gravitational/teleport/lib/tlsca"
 	"github.com/gravitational/teleport/lib/utils"
 	libslices "github.com/gravitational/teleport/lib/utils/slices"
@@ -88,6 +90,8 @@ type Identity struct {
 	ClusterName string
 	// SystemRoles is a list of additional system roles.
 	SystemRoles []string
+	// ScopePin pins a scoped agent to a specific scope and encodes the agent's system roles.
+	ScopePin *scopesv1.Pin
 	// AgentScope is the scope an identity is constrained to.
 	AgentScope string
 	// ImmutableLabelHash is the hash used to verify immutable labels against
@@ -347,6 +351,15 @@ func ReadSSHIdentityFromKeyPair(keyBytes, certBytes []byte) (*Identity, error) {
 	agentScope := cert.Permissions.Extensions[teleport.CertExtensionAgentScope]
 	labelHash := cert.Permissions.Extensions[teleport.CertExtensionImmutableLabelHash]
 
+	var scopePin *scopesv1.Pin
+	if encoded, ok := cert.Permissions.Extensions[teleport.CertExtensionAgentScopePin]; ok {
+		pin, err := pinning.Decode(encoded)
+		if err != nil {
+			return nil, trace.BadParameter("failed to decode agent scope pin: %v", err)
+		}
+		scopePin = pin
+	}
+
 	return &Identity{
 		ID:                 IdentityID{HostUUID: cert.ValidPrincipals[0], Role: role},
 		ClusterName:        clusterName,
@@ -354,6 +367,7 @@ func ReadSSHIdentityFromKeyPair(keyBytes, certBytes []byte) (*Identity, error) {
 		CertBytes:          certBytes,
 		KeySigner:          certSigner,
 		Cert:               cert,
+		ScopePin:           scopePin,
 		AgentScope:         agentScope,
 		ImmutableLabelHash: labelHash,
 	}, nil

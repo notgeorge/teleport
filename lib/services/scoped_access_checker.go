@@ -186,6 +186,27 @@ func NewScopedAccessCheckerFromUnscoped(checker AccessChecker) *ScopedAccessChec
 	return &ScopedAccessChecker{unscopedChecker: checker}
 }
 
+// NewScopedAccessCheckerForSystemRole creates a ScopedAccessChecker for a single system role. The checker
+// is root-scoped (scopeOfOrigin=/, scopeOfEffect=/) reflecting that system role permissions are treated as
+// assigned at root scope.
+func NewScopedAccessCheckerForSystemRole(roleName string, checker AccessChecker) *ScopedAccessChecker {
+	return &ScopedAccessChecker{
+		scopeOfOrigin: scopes.Root,
+		scopeOfEffect: scopes.Root,
+		role: &scopedaccessv1.ScopedRole{
+			Metadata: &headerv1.Metadata{
+				Name: "system/" + roleName,
+			},
+			Scope:   scopes.Root,
+			Version: types.V1,
+			Spec: &scopedaccessv1.ScopedRoleSpec{
+				AssignableScopes: []string{scopes.Root},
+			},
+		},
+		scopedCompatChecker: checker,
+	}
+}
+
 // isScoped reports whether this checker operates on a scoped identity.
 func (c *ScopedAccessChecker) isScoped() bool {
 	return c.role != nil

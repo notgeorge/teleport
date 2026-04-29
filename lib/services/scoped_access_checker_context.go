@@ -48,19 +48,33 @@ type roleCheckerKey struct {
 var defaultImplicitRoleKey = roleCheckerKey{}
 
 // ScopedAccessCheckerContext is the top-level access checker state, abstracting over scoped and unscoped
-// identities. For scoped identities it builds and caches per-role checkers based on the user's scope pin
-// and role assignments. For unscoped identities it wraps a standard AccessChecker.
+// identities. For scoped identities it builds and caches per-role checkers based on the scope pin and role
+// assignments or system roles. For unscoped identities it wraps a standard AccessChecker.
+//
+// User-vs-agent differences are fully captured at construction time in the checkersAtPoint closure.
+// Once constructed, this type is uniform across both scoped identity kinds.
 type ScopedAccessCheckerContext struct {
-	// scoped path — populated when isScoped()
-	builder              scopedAccessCheckerBuilder
-	cachedCheckerForRole func(ctx context.Context, key roleCheckerKey) (*ScopedAccessChecker, error)
+	// pin is the scope pin for this identity. Non-nil iff isScoped().
+	pin *scopesv1.Pin
 
-	// unscoped path — populated when !isScoped()
+	// traits are the user traits for this context. Nil for agent pin identities.
+	traits wrappers.Traits
+
+	// resolveRef resolves a RoleRef to a ScopedAccessChecker. The zero-value RoleRef is the preamble
+	// sentinel: user pins return the default implicit role checker, agent pins return nil.
+	// Non-nil iff isScoped().
+	resolveRef func(ctx context.Context, ref pinning.RoleRef) (*ScopedAccessChecker, error)
+
+	// enumerateAll enumerates checkers across all role assignments, for cert parameter aggregation.
+	// Non-nil only for user pins; nil for agent pins (cert param aggregation is not supported).
+	enumerateAll func(ctx context.Context) stream.Stream[*ScopedAccessChecker]
+
+	// unscopedChecker wraps a standard AccessChecker for unscoped identities.
+	// Non-nil iff !isScoped().
 	unscopedChecker AccessChecker
 }
 
-// NewScopedAccessCheckerContext builds a ScopedAccessCheckerContext for a scoped identity. The supplied
-// context.Context is captured for propagating cancellation during role loading.
+// NewScopedAccessCheckerContext builds a ScopedAccessCheckerContext for a scoped user identity.
 func NewScopedAccessCheckerContext(ctx context.Context, info *AccessInfo, localCluster string, reader ScopedRoleReader) (*ScopedAccessCheckerContext, error) {
 	builder := scopedAccessCheckerBuilder{
 		info:         info,
@@ -72,11 +86,46 @@ func NewScopedAccessCheckerContext(ctx context.Context, info *AccessInfo, localC
 		return nil, trace.Wrap(err)
 	}
 
+	pin := info.ScopePin
+	if pin.GetKind() != scopesv1.PinKind_PIN_KIND_USER {
+		return nil, trace.BadParameter("cannot create user pin checker context for pin of kind %v", pin.GetKind())
+	}
+
 	cachedCheckerForRole, _ := once.KeyedValue(builder.newCheckerForRole)
 
+	resolveRef := func(ctx context.Context, ref pinning.RoleRef) (*ScopedAccessChecker, error) {
+		if ref == (pinning.RoleRef{}) {
+			// preamble sentinel: return the default implicit role checker
+			return cachedCheckerForRole(ctx, defaultImplicitRoleKey)
+		}
+		return cachedCheckerForRole(ctx, roleCheckerKey{
+			scopeOfOrigin: ref.ScopeOfOrigin,
+			scopeOfEffect: ref.ScopeOfEffect,
+			roleName:      ref.Name,
+		})
+	}
+
+	enumerateAll := func(ctx context.Context) stream.Stream[*ScopedAccessChecker] {
+		return func(yield func(*ScopedAccessChecker, error) bool) {
+			for assignment := range pinning.EnumerateAllAssignments(pin) {
+				key := roleCheckerKey{
+					scopeOfOrigin: assignment.ScopeOfOrigin,
+					scopeOfEffect: assignment.ScopeOfEffect,
+					roleName:      assignment.RoleName,
+				}
+				checker, err := cachedCheckerForRole(ctx, key)
+				if !yield(checker, err) {
+					return
+				}
+			}
+		}
+	}
+
 	return &ScopedAccessCheckerContext{
-		builder:              builder,
-		cachedCheckerForRole: cachedCheckerForRole,
+		pin:          pin,
+		traits:       info.Traits,
+		resolveRef:   resolveRef,
+		enumerateAll: enumerateAll,
 	}, nil
 }
 
@@ -85,17 +134,57 @@ func NewScopedAccessCheckerContextFromUnscoped(checker AccessChecker) *ScopedAcc
 	return &ScopedAccessCheckerContext{unscopedChecker: checker}
 }
 
+// NewScopedAccessCheckerContextForAgentPin builds a ScopedAccessCheckerContext for a scoped agent identity.
+// Each entry in checkersByRole maps a system role name to its [ScopedAccessChecker], which must have been
+// built via [NewScopedAccessCheckerForSystemRole]. One checker per role preserves the single-role evaluation
+// invariant: the first role that permits access determines all parameters.
+//
+// System role checkers are resolved at the (root, root) enforcement point, reflecting that system role
+// permissions are treated as assigned at root scope.
+func NewScopedAccessCheckerContextForAgentPin(pin *scopesv1.Pin, checkersByRole map[string]*ScopedAccessChecker) (*ScopedAccessCheckerContext, error) {
+	if pin == nil {
+		return nil, trace.BadParameter("cannot create agent pin checker context without a pin")
+	}
+	if pin.GetKind() != scopesv1.PinKind_PIN_KIND_AGENT {
+		return nil, trace.BadParameter("cannot create agent pin checker context for pin of kind %v", pin.GetKind())
+	}
+	if len(checkersByRole) == 0 {
+		return nil, trace.BadParameter("cannot create agent pin checker context without any checkers")
+	}
+
+	if err := pinning.WeakValidate(pin); err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	resolveRef := func(ctx context.Context, ref pinning.RoleRef) (*ScopedAccessChecker, error) {
+		if ref == (pinning.RoleRef{}) {
+			// preamble sentinel: agent pins have no implicit role preamble
+			return nil, nil
+		}
+		checker, ok := checkersByRole[ref.Name]
+		if !ok {
+			return nil, trace.BadParameter("no checker found for system role %q", ref.Name)
+		}
+		return checker, nil
+	}
+
+	return &ScopedAccessCheckerContext{
+		pin:        pin,
+		resolveRef: resolveRef,
+		// enumerateAll is nil: cert parameter aggregation is not supported for agent pins
+		// traits is nil: agent pins have no user traits
+	}, nil
+}
+
 // isScoped reports whether this context operates on a scoped identity.
 func (c *ScopedAccessCheckerContext) isScoped() bool {
 	return c.unscopedChecker == nil
 }
 
-// ScopePin returns the scope pin for the identity, if the identity is scoped.
+// ScopePin returns the scope pin for the identity, if the identity is scoped (user or agent).
+// Returns (nil, false) for unscoped identities.
 func (c *ScopedAccessCheckerContext) ScopePin() (*scopesv1.Pin, bool) {
-	if !c.isScoped() {
-		return nil, false
-	}
-	return c.builder.info.ScopePin, true
+	return c.pin, c.pin != nil
 }
 
 // CheckersForResourceScope returns a stream of ScopedAccessCheckers in evaluation order for the given resource
@@ -139,43 +228,42 @@ func (c *ScopedAccessCheckerContext) checkersForResourceScope(ctx context.Contex
 		// particular role. For example, if a user has a scoped role assigned at /foo which grants access to all ssh
 		// nodes, but they are pinned to scope /foo/bar, even if a role at /foo permits access, the pin restricts
 		// access to only resources subject to /foo/bar.
-		if enforcePin && !pinning.PinAppliesToResourceScope(c.builder.info.ScopePin, scope) {
-			yield(nil, trace.AccessDenied("scope pin %q does not apply to resource scope %q", c.builder.info.ScopePin.GetScope(), scope))
+		if enforcePin && !pinning.PinAppliesToResourceScope(c.pin, scope) {
+			yield(nil, trace.AccessDenied("scope pin %q does not apply to resource scope %q", c.pin.GetScope(), scope))
 			return
 		}
 
 		var successfullyResolved int
 		var lastErr error
 
-		defaultImplicitChecker, err := c.cachedCheckerForRole(ctx, defaultImplicitRoleKey)
-		if err != nil {
+		// Preamble: resolve the zero-value sentinel RoleRef before the main loop.
+		// User pins return the default implicit role checker; agent pins return nil (no preamble).
+		// Preamble results do not count toward successfullyResolved, as a preamble failure should not
+		// suppress systemic errors from the main loop.
+		if preambleChecker, err := c.resolveRef(ctx, pinning.RoleRef{}); err != nil {
 			slog.WarnContext(ctx, "skipping default implicit role evaluation due to error", "error", err)
 			lastErr = err
-		} else {
-			// yield the default implicit role checker first. This simulates the presence of the default implicit
-			// role at root scope, ensuring that its privileges are always considered first in evaluation.
-			if !yield(defaultImplicitChecker, nil) {
+		} else if preambleChecker != nil {
+			if !yield(preambleChecker, nil) {
 				return
 			}
-			// note that we are not incrementing successfullyResolved here. the default implicit role doesn't
-			// really count from the perspective of deciding whether or not we're hitting a systemic failure.
 		}
 
-		// iterate through the ordered enforcement points for this resource scope. policy evaluation by scope is ordered first by
-		// Scope of Origin (ancestral to descendant) and then by Scope of Effect (descendant to ancestral within each origin).
-		// We proceed through each permutation in order, evaluating any roles assigned at that specific point.
+		// Main loop: iterate through the ordered enforcement points for this resource scope. Policy evaluation
+		// by scope is ordered first by Scope of Origin (ancestral to descendant) and then by Scope of Effect
+		// (descendant to ancestral within each origin). We proceed through each permutation in order, evaluating
+		// any checkers assigned at that specific point.
 		for point := range scopes.EnforcementPointsForResourceScope(scope) {
-			for roleName := range pinning.GetRolesAtEnforcementPoint(c.builder.info.ScopePin, point) {
-				key := roleCheckerKey{
-					scopeOfOrigin: point.ScopeOfOrigin,
-					scopeOfEffect: point.ScopeOfEffect,
-					roleName:      roleName,
-				}
-				checker, err := c.cachedCheckerForRole(ctx, key)
+			for ref := range pinning.GetRolesAtEnforcementPoint(c.pin, point) {
+				checker, err := c.resolveRef(ctx, ref)
 				if err != nil {
 					// in classic teleport access checking skipping a role would be unacceptable due to side effects and deny rules. the scoped model
 					// however relies on cross-role isolation and explicitly allows omission of roles.
-					slog.WarnContext(ctx, "skipping role evaluation due to error", "role_name", roleName, "scope_of_origin", point.ScopeOfOrigin, "scope_of_effect", point.ScopeOfEffect, "error", err)
+					slog.WarnContext(ctx, "skipping role evaluation due to error",
+						"scope_of_origin", ref.ScopeOfOrigin,
+						"scope_of_effect", ref.ScopeOfEffect,
+						"role", ref.Name,
+						"error", err)
 					lastErr = err
 					continue
 				}
@@ -187,7 +275,7 @@ func (c *ScopedAccessCheckerContext) checkersForResourceScope(ctx context.Contex
 		}
 
 		if successfullyResolved == 0 && lastErr != nil {
-			// if we didn't successfully build any assignment-derived checkers and encountered errors, return the last error encountered
+			// if we didn't successfully build any checkers and encountered errors, return the last error encountered
 			// as it may be indicative of some kind of systemic failure rather than a problem with a specific assignment.
 			yield(nil, lastErr)
 		}
@@ -196,8 +284,8 @@ func (c *ScopedAccessCheckerContext) checkersForResourceScope(ctx context.Contex
 
 // riskyEnumerateScopedCheckers returns a stream of all possible scoped access checkers for the identity,
 // enumerating every role assignment in the pin's assignment tree. The order is undefined and must not be
-// relied upon for access control decisions. This method panics if called on an unscoped context — it is
-// only meaningful for scoped identities.
+// relied upon for access control decisions. This method panics if called on an unscoped context or an agent
+// pin context — it is only meaningful for scoped user identities.
 //
 // Note that use of this method should be treated with extreme caution. Accidental misuse could easily
 // result in a scope isolation violation.
@@ -205,30 +293,10 @@ func (c *ScopedAccessCheckerContext) riskyEnumerateScopedCheckers(ctx context.Co
 	if !c.isScoped() {
 		panic("riskyEnumerateScopedCheckers called on an unscoped access checker context (this is a bug)")
 	}
-	return func(yield func(*ScopedAccessChecker, error) bool) {
-		var yielded int
-		var lastErr error
-		for assignment := range pinning.EnumerateAllAssignments(c.builder.info.ScopePin) {
-			key := roleCheckerKey{
-				scopeOfOrigin: assignment.ScopeOfOrigin,
-				scopeOfEffect: assignment.ScopeOfEffect,
-				roleName:      assignment.RoleName,
-			}
-			checker, err := c.cachedCheckerForRole(ctx, key)
-			if err != nil {
-				slog.WarnContext(ctx, "skipping role evaluation due to error", "role_name", assignment.RoleName, "scope_of_origin", assignment.ScopeOfOrigin, "scope_of_effect", assignment.ScopeOfEffect, "error", err)
-				lastErr = err
-				continue
-			}
-			if !yield(checker, nil) {
-				return
-			}
-			yielded++
-		}
-		if yielded == 0 && lastErr != nil {
-			yield(nil, lastErr)
-		}
+	if c.enumerateAll == nil {
+		panic("riskyEnumerateScopedCheckers called on an agent pin context (this is a bug)")
 	}
+	return c.enumerateAll(ctx)
 }
 
 // CheckMaybeHasAccessToRules returns an error if the context definitely does not have access to the provided
@@ -328,12 +396,12 @@ func (c *ScopedAccessCheckerContext) AccessStateFromTLSIdentity(ctx context.Cont
 	}, nil
 }
 
-// Traits returns the user traits for this context.
+// Traits returns the user traits for this context. Agent pin identities have no traits.
 func (c *ScopedAccessCheckerContext) Traits() wrappers.Traits {
 	if !c.isScoped() {
 		return c.unscopedChecker.Traits()
 	}
-	return c.builder.info.Traits
+	return c.traits
 }
 
 // CertParams returns a sub-context for resolving certificate parameters during certificate generation.

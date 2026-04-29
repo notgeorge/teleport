@@ -27,6 +27,7 @@ import (
 
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/scopes"
+	"github.com/gravitational/teleport/lib/scopes/pinning"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/services/readonly"
 )
@@ -102,20 +103,20 @@ func (a *authorizer) authorizeScoped(ctx context.Context) (scopedCtx *ScopedCont
 		return nil, trace.Wrap(err)
 	}
 
-	user, ok := userI.(LocalUser)
-	if !ok {
-		return nil, trace.AccessDenied("scoped authorization is only supported for local users, got %T", userI)
+	switch user := userI.(type) {
+	case LocalUser:
+		if user.Identity.ScopePin == nil {
+			return nil, trace.AccessDenied("scoped authorization is not supported for unscoped identities")
+		}
+		if a.scopedRoleReader == nil {
+			return nil, trace.AccessDenied("authorizer not configured for scoped authorization")
+		}
+		scopedCtx, err = scopedContextForLocalUser(ctx, user, a.accessPoint, a.scopedRoleReader, a.clusterName)
+	case ScopedBuiltinRole:
+		scopedCtx, err = a.scopedContextForBuiltinRole(ctx, user)
+	default:
+		return nil, trace.AccessDenied("scoped authorization is not supported for identity of type %T", userI)
 	}
-
-	if user.Identity.ScopePin == nil {
-		return nil, trace.AccessDenied("scoped authorization is not supported for unscoped identities")
-	}
-
-	if a.scopedRoleReader == nil {
-		return nil, trace.AccessDenied("authorizer not configured for scoped authorization")
-	}
-
-	scopedCtx, err = scopedContextForLocalUser(ctx, user, a.accessPoint, a.scopedRoleReader, a.clusterName)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -124,6 +125,38 @@ func (a *authorizer) authorizeScoped(ctx context.Context) (scopedCtx *ScopedCont
 	// have enforcement use a common implementation across scoped/unscoped authorize variants.
 
 	return scopedCtx, nil
+}
+
+// scopedContextForBuiltinRole builds a ScopedContext for a scoped agent identity.
+func (a *authorizer) scopedContextForBuiltinRole(ctx context.Context, role ScopedBuiltinRole) (*ScopedContext, error) {
+	recConfig, err := a.readOnlyAccessPoint.GetReadOnlySessionRecordingConfig(ctx)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	// Build one ScopedAccessChecker per system role. This preserves the single-role
+	// evaluation invariant: the first role that permits access determines all parameters.
+	checkersByRole := make(map[string]*services.ScopedAccessChecker)
+	for sr := range pinning.SystemRoles(role.ScopePin) {
+		roleSet, err := RoleSetForBuiltinRoles(role.ClusterName, recConfig, true /* isScoped */, sr)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		checker := services.NewAccessCheckerWithRoleSet(&services.AccessInfo{
+			Roles: []string{string(sr)},
+		}, role.ClusterName, roleSet)
+		checkersByRole[string(sr)] = services.NewScopedAccessCheckerForSystemRole(string(sr), checker)
+	}
+
+	checkerContext, err := services.NewScopedAccessCheckerContextForAgentPin(role.ScopePin, checkersByRole)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &ScopedContext{
+		Identity:       role,
+		CheckerContext: checkerContext,
+	}, nil
 }
 
 func scopedContextForLocalUser(ctx context.Context, u LocalUser, accessPoint AuthorizerAccessPoint, reader services.ScopedRoleReader, clusterName string) (*ScopedContext, error) {
@@ -171,7 +204,8 @@ func (s *ScopedContext) UnscopedContext() (*Context, bool) {
 }
 
 // RuleContext returns the standard services.Context used for resource-independent rule
-// evaluation.
+// evaluation. For agent pin identities, User is nil and rule evaluation will rely on
+// system-role permissions which do not use user traits in their where-clauses.
 func (s *ScopedContext) RuleContext() services.Context {
 	return services.Context{
 		User: s.User,

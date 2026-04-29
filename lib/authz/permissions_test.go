@@ -20,6 +20,7 @@ package authz_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -38,6 +39,7 @@ import (
 	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/defaults"
 	mfav1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/mfa/v1"
+	scopesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/v1"
 	"github.com/gravitational/teleport/api/mfa"
 	"github.com/gravitational/teleport/api/types"
 	apievents "github.com/gravitational/teleport/api/types/events"
@@ -1547,4 +1549,32 @@ func resourceDiff(res1, res2 types.Resource) string {
 	return cmp.Diff(res1, res2,
 		cmpopts.IgnoreFields(types.Metadata{}, "Revision", "Namespace"),
 		cmpopts.EquateEmpty())
+}
+
+// TestAuthorizeRejectsScopedAgents verifies that Authorize returns the
+// services.ErrScopedIdentity sentinel when called with a ScopedBuiltinRole.
+func TestAuthorizeRejectsScopedAgents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	_, _, authorizer := newTestResources(t)
+
+	scopedRole := authz.ScopedBuiltinRole{
+		ScopePin: &scopesv1.Pin{
+			Kind:  scopesv1.PinKind_PIN_KIND_AGENT,
+			Scope: "/some/scope",
+			SystemRoles: &scopesv1.SystemRoles{
+				Primary: string(types.RoleNode),
+			},
+		},
+		ServerFQDN:  "node-uuid." + clusterName,
+		ClusterName: clusterName,
+		Identity: tlsca.Identity{
+			Username: "node-uuid." + clusterName,
+		},
+	}
+
+	_, err := authorizer.Authorize(authz.ContextWithUser(ctx, scopedRole))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, services.ErrScopedIdentity), "expected ErrScopedIdentity, got: %v", err)
 }

@@ -42,6 +42,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "basic",
 			pin: &scopesv1.Pin{
+				Kind:  scopesv1.PinKind_PIN_KIND_USER,
 				Scope: "/foo",
 				AssignmentTree: AssignmentTreeFromMap(map[string]map[string][]string{
 					"/": {"/": {"r1"}, "/foo": {"r2"}, "/foo/bar": {"r3"}},
@@ -537,11 +538,11 @@ func TestGetRolesAtEnforcementPoint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []string
-			for role := range GetRolesAtEnforcementPoint(tt.pin, scopes.EnforcementPoint{
+			for ref := range GetRolesAtEnforcementPoint(tt.pin, scopes.EnforcementPoint{
 				ScopeOfOrigin: tt.scopeOfOrigin,
 				ScopeOfEffect: tt.scopeOfEffect,
 			}) {
-				got = append(got, role)
+				got = append(got, ref.Name)
 			}
 
 			if tt.expect == nil {
@@ -589,11 +590,11 @@ func TestRolesAtEnforcementPointComposition(t *testing.T) {
 	// Collect assignments using EnforcementPointsForResourceScope + GetRolesAtEnforcementPoint
 	var gotAssignments []RoleAssignment
 	for point := range scopes.EnforcementPointsForResourceScope(resourceScope) {
-		for role := range GetRolesAtEnforcementPoint(pin, point) {
+		for ref := range GetRolesAtEnforcementPoint(pin, point) {
 			gotAssignments = append(gotAssignments, RoleAssignment{
-				ScopeOfOrigin: point.ScopeOfOrigin,
-				ScopeOfEffect: point.ScopeOfEffect,
-				RoleName:      role,
+				ScopeOfOrigin: ref.ScopeOfOrigin,
+				ScopeOfEffect: ref.ScopeOfEffect,
+				RoleName:      ref.Name,
 			})
 		}
 	}

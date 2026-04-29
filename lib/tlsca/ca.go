@@ -121,8 +121,9 @@ type Identity struct {
 	// Username is the name of the user (for end-users/bots) or the Host ID (for
 	// Teleport processes).
 	Username string
-	// ScopePin is an optional pin that ties the certificate to a specific scope and set of scoped roles. When
-	// set, the Groups field must not be set.
+	// ScopePin is an optional pin that ties the certificate to a specific scope. For user identities it
+	// encodes scoped role assignments (PIN_KIND_USER); for agent identities it encodes system roles
+	// (PIN_KIND_AGENT). When set, the Groups field must not be set.
 	ScopePin *scopesv1.Pin
 	// AgentScope is the scope this identity belongs to.
 	AgentScope string
@@ -643,6 +644,10 @@ var (
 	// used to tie the certificate to a spec
 	AgentScopeASN1ExtensionOID = asn1.ObjectIdentifier{1, 3, 9999, 2, 25}
 
+	// AgentScopePinASN1ExtensionOID is an extension OID that contains the agent scope pin,
+	// encoding the agent's pinned scope and system roles.
+	AgentScopePinASN1ExtensionOID = asn1.ObjectIdentifier{1, 3, 9999, 2, 31}
+
 	// AllowedResourceAccessIDsASN1ExtensionOID is an extension OID used to list the
 	// ResourceAccessIDs which the certificate should be able to grant access to
 	AllowedResourceAccessIDsASN1ExtensionOID = asn1.ObjectIdentifier{1, 3, 9999, 2, 26}
@@ -996,15 +1001,25 @@ func (id *Identity) Subject() (pkix.Name, error) {
 	}
 
 	if id.ScopePin != nil {
-		pin, err := pinning.Encode(id.ScopePin)
+		// User pins go in the user OID; agent pins go in the agent OID. The OID separation
+		// ensures fail-closed behavior on older auth servers that only know about user pins.
+		var oid asn1.ObjectIdentifier
+		switch id.ScopePin.GetKind() {
+		case scopesv1.PinKind_PIN_KIND_USER:
+			oid = ScopePinASN1ExtensionOID
+		case scopesv1.PinKind_PIN_KIND_AGENT:
+			oid = AgentScopePinASN1ExtensionOID
+		default:
+			return pkix.Name{}, trace.BadParameter("cannot encode scope pin with unknown or unspecified kind %v", id.ScopePin.GetKind())
+		}
+		encoded, err := pinning.Encode(id.ScopePin)
 		if err != nil {
 			return pkix.Name{}, trace.Errorf("failed to encode scope pin: %w", err)
 		}
-
 		subject.ExtraNames = append(subject.ExtraNames,
 			pkix.AttributeTypeAndValue{
-				Type:  ScopePinASN1ExtensionOID,
-				Value: pin,
+				Type:  oid,
+				Value: encoded,
 			})
 	}
 
@@ -1380,6 +1395,20 @@ func FromSubject(subject pkix.Name, expires time.Time) (*Identity, error) {
 				pin, err := pinning.Decode(val)
 				if err != nil {
 					return nil, trace.Errorf("failed to decode scope pin: %w", err)
+				}
+				// Certs issued before PinKind was introduced will have UNSPECIFIED here.
+				// Pins decoded from the user OID are always user pins.
+				if pin.Kind == scopesv1.PinKind_PIN_KIND_UNSPECIFIED {
+					pin.Kind = scopesv1.PinKind_PIN_KIND_USER
+				}
+				id.ScopePin = pin
+			}
+		case attr.Type.Equal(AgentScopePinASN1ExtensionOID):
+			val, ok := attr.Value.(string)
+			if ok {
+				pin, err := pinning.Decode(val)
+				if err != nil {
+					return nil, trace.Errorf("failed to decode agent scope pin: %w", err)
 				}
 				id.ScopePin = pin
 			}
