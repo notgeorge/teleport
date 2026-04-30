@@ -8290,7 +8290,7 @@ func waitForOutput(t *testing.T, r io.Reader, substr string, msgAndArgs ...inter
 			n, err := r.Read(out)
 			outStr := removeSpace(string(out[:n]))
 
-			slog.DebugContext(context.Background(), "waitForOutput read", "output", outStr, "expected", substr)
+			slog.DebugContext(t.Context(), "waitForOutput read", "output", outStr, "expected", substr)
 
 			// Check for [substr] before checking the error,
 			// as it's valid for n > 0 even when there is an error.
