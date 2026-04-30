@@ -270,6 +270,20 @@ func (c *Client) iterateSeq(ctx context.Context, endpoint string, ds DeltaStore,
 				yield(nil, trace.Wrap(ErrMissingDeltaLink))
 			}
 		}
+
+		// Below, the delta link host is checked against the baseURL host
+		// which has already gone through validation when constructing the
+		// graph client. This isn't strictly necessary because as per the delta
+		// API docs, the client must save the whole delta link and use it as it
+		// is in the next delta request.
+		// https://learn.microsoft.com/en-us/graph/delta-query-overview#state-tokens
+		// https://learn.microsoft.com/en-us/graph/api/group-delta?view=graph-rest-1.0&tabs=http
+		if err := validateDeltaLink(c.baseURL, deltaURI); err != nil {
+			return func(yield func(json.RawMessage, error) bool) {
+				yield(nil, trace.Wrap(err))
+			}
+		}
+
 		uriString = deltaURI
 	}
 	if uriString == "" {
@@ -537,4 +551,19 @@ func (c *Client) IterateUsersTransitiveMemberOf(ctx context.Context, userID, gro
 		return trace.Wrap(err)
 	}
 	return trace.Wrap(itErr)
+}
+
+// validateDeltaLink checks host of the baseURL and deltaLink matches.
+func validateDeltaLink(baseURL *url.URL, deltaLink string) error {
+	deltaURL, err := url.Parse(deltaLink)
+	if err != nil {
+		return trace.BadParameter("invalid delta link URL %s", deltaLink)
+	}
+	if deltaURL.Scheme != "https" {
+		return trace.BadParameter("delta link must be of HTTPs scheme, received %q", deltaURL.Scheme)
+	}
+	if baseURL.Host != deltaURL.Host {
+		return trace.BadParameter("base URL and delta link URL host mismatch, base=%q delta=%q", baseURL.Host, deltaURL.Host)
+	}
+	return nil
 }

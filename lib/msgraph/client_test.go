@@ -1215,3 +1215,61 @@ func TestDeltaMethodsWithoutTop(t *testing.T) {
 		assertNoTop(t, deltaStore.Get(groupEndpoint))
 	})
 }
+
+func TestValidateDeltaLink(t *testing.T) {
+	ctx := t.Context()
+	tests := []struct {
+		name           string
+		baseURL        string
+		deltaLink      string
+		errorAssertion require.ErrorAssertionFunc
+	}{
+		{
+			name:           "matching host",
+			baseURL:        types.MSGraphDefaultEndpoint,
+			deltaLink:      fmt.Sprintf("%s/v1.0/users/delta?$deltatoken=latest", types.MSGraphDefaultEndpoint),
+			errorAssertion: require.NoError,
+		},
+		{
+			name:      "matching host with http sceheme",
+			baseURL:   types.MSGraphDefaultEndpoint,
+			deltaLink: "http://graph.microsoft.com/v1.0/users/delta?$deltatoken=latest",
+			errorAssertion: func(t require.TestingT, err error, i ...any) {
+				require.ErrorContains(t, err, "scheme")
+			},
+		},
+		{
+			name:      "different host",
+			baseURL:   types.MSGraphDefaultEndpoint,
+			deltaLink: fmt.Sprintf("%s/v1.0/users/delta?$deltatoken=latest", "https://cloudapp.azure.com"),
+			errorAssertion: func(t require.TestingT, err error, i ...any) {
+				require.ErrorContains(t, err, "host mismatch")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeServer := msgraphtest.NewServer()
+			t.Cleanup(func() { fakeServer.TLSServer.Close() })
+
+			const endpoint = "users/delta"
+			ds := msgraphtest.NewFakeDeltaStore()
+			ds.Set(endpoint, tt.deltaLink)
+
+			client, err := NewClient(Config{
+				HTTPClient:    newHTTPClient(fakeServer.TLSServer),
+				TokenProvider: &fakeTokenProvider{},
+				RetryConfig:   &retryConfig,
+				GraphEndpoint: tt.baseURL,
+			})
+			require.NoError(t, err)
+
+			err = validateDeltaLink(client.baseURL, tt.deltaLink)
+			tt.errorAssertion(t, err)
+
+			for _, err := range client.iterateSeq(ctx, endpoint, ds, WithDeltaQuery()) {
+				tt.errorAssertion(t, err)
+			}
+		})
+	}
+}
