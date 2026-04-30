@@ -234,6 +234,8 @@ func baseScopedRole() *scopedaccessv1.ScopedRole {
 	}
 }
 
+func ptr[T any](v T) *T { return &v }
+
 // TestClientIdleTimeoutNotInClassicRole verifies that ScopedRoleToRole does not populate ClientIdleTimeout
 // in the classic role options. Per the scoped role design, client_idle_timeout is read directly from the
 // appropriate protocol block on the scoped role, which does not have a direct classic role equivalent.
@@ -325,6 +327,30 @@ func TestSSHFileCopyNotInClassicRole(t *testing.T) {
 	role, err := ScopedRoleToRole(sr, "/foo/bar")
 	require.NoError(t, err)
 	require.Equal(t, types.NewBoolOption(true), role.GetOptions().SSHFileCopy)
+}
+
+func TestDisconnectExpiredCertNotInClassicRole(t *testing.T) {
+	t.Parallel()
+
+	sr := baseScopedRole()
+	sr.Spec.Ssh.DisconnectExpiredCert = ptr(true)
+
+	role, err := ScopedRoleToRole(sr, "/foo/bar")
+	require.NoError(t, err)
+	require.Equal(t, types.NewBool(false), role.GetOptions().DisconnectExpiredCert)
+}
+
+func TestLockingModeNotInClassicRole(t *testing.T) {
+	t.Parallel()
+
+	sr := baseScopedRole()
+	sr.Spec.Ssh.Lock = &scopedaccessv1.Lock{
+		Mode: ptr("strict"),
+	}
+
+	role, err := ScopedRoleToRole(sr, "/foo/bar")
+	require.NoError(t, err)
+	require.Empty(t, string(role.GetOptions().Lock))
 }
 
 // TestKubeConversion verifies the various kube-related scoped role conversion scenarios.

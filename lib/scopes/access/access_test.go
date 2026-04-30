@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/gravitational/teleport/api/constants"
 	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
 	labelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/label/v1"
 	scopedaccessv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/access/v1"
@@ -392,6 +393,69 @@ func TestValidateRole(t *testing.T) {
 				Version: types.V1,
 			},
 			strongOk: true,
+			weakOk:   true,
+		},
+		{
+			name: "invalid ssh.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Ssh: &scopedaccessv1.ScopedRoleSSH{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String("invalid"),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: false,
+			weakOk:   true,
+		},
+		{
+			name: "valid ssh.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Ssh: &scopedaccessv1.ScopedRoleSSH{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String(string(constants.LockingModeStrict)),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: true,
+			weakOk:   true,
+		},
+		{
+			name: "empty ssh.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Ssh: &scopedaccessv1.ScopedRoleSSH{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String(""),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: false,
 			weakOk:   true,
 		},
 	}
@@ -1244,6 +1308,10 @@ func TestStrongValidateRoleSpecAllFieldsValidated(t *testing.T) {
 			},
 			HostSudoers: []string{"ALL=(ALL) NOPASSWD:ALL"},
 			MaxSessions: proto.Int64(10),
+			Lock: &scopedaccessv1.Lock{
+				Mode: proto.String(string(constants.LockingModeBestEffort)),
+			},
+			DisconnectExpiredCert: proto.Bool(true),
 		},
 		Kube: &scopedaccessv1.ScopedRoleKube{
 			Groups: []string{"viewer"},

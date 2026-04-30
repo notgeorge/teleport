@@ -23,6 +23,7 @@ import (
 
 	"github.com/gravitational/trace"
 
+	"github.com/gravitational/teleport/api/constants"
 	scopedaccessv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/access/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/lib/scopes"
@@ -252,6 +253,16 @@ func StrongValidateRole(role *scopedaccessv1.ScopedRole) error {
 	// verify that max_sessions is non-negative
 	if ms := role.GetSpec().GetSsh().GetMaxSessions(); ms < 0 {
 		return trace.BadParameter("scoped role %q has invalid ssh.max_sessions %d: must be non-negative", role.GetMetadata().GetName(), ms)
+	}
+
+	// verify that lock.Mode is a recognized value
+	if lock := role.GetSpec().GetSsh().GetLock(); lock != nil {
+		mode := lock.GetMode()
+		switch constants.LockingMode(mode) {
+		case constants.LockingModeBestEffort, constants.LockingModeStrict:
+		default:
+			return trace.BadParameter("scoped role %q has invalid ssh.locking_mode %q", role.GetMetadata().GetName(), mode)
+		}
 	}
 
 	// verify that kube labels are well-formed

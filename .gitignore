@@ -18,6 +18,7 @@ default.etcd
 
 # editors
 .vscode
+.zed
 *.swp
 .idea
 

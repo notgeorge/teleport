@@ -129,6 +129,11 @@ spec:
                       string (e.g. "30m", "1h"). If empty, the defaults block value
                       (or global default) applies.
                     type: string
+                  disconnect_expired_cert:
+                    description: DisconnectExpiredCert controls whether SSH sessions
+                      are disconnected when the user certificate expires. If unset,
+                      cluster-wide auth preference applies.
+                    type: boolean
                   file_copy:
                     description: FileCopy indicates whether remote file operations
                       via SCP or SFTP are allowed over an SSH session. It defaults
@@ -180,6 +185,14 @@ spec:
                       type: object
                     nullable: true
                     type: array
+                  lock:
+                    description: Lock configures the role's locking behavior.
+                    nullable: true
+                    properties:
+                      mode:
+                        description: 'Allowed values: strict | best_effort'
+                        type: string
+                    type: object
                   logins:
                     description: Logins is the list of OS logins this role permits
                       on matching nodes.

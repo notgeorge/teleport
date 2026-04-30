@@ -84,7 +84,31 @@ func (c *SSHAccessChecker) AdjustDisconnectExpiredCert(disconnect bool) bool {
 	if !c.checker.isScoped() {
 		return c.checker.unscopedChecker.AdjustDisconnectExpiredCert(disconnect)
 	}
-	return c.checker.scopedCompatChecker.AdjustDisconnectExpiredCert(disconnect)
+
+	if c.checker.role.GetSpec().GetSsh().DisconnectExpiredCert != nil {
+		return c.checker.role.GetSpec().GetSsh().GetDisconnectExpiredCert()
+	}
+
+	return disconnect
+}
+
+// LockingMode returns the SSH lock enforcement mode to apply.
+func (c *SSHAccessChecker) LockingMode(defaultMode constants.LockingMode) constants.LockingMode {
+	if !c.checker.isScoped() {
+		return c.checker.unscopedChecker.LockingMode(defaultMode)
+	}
+
+	if lock := c.checker.role.GetSpec().GetSsh().Lock; lock != nil {
+		mode := constants.LockingMode(lock.GetMode())
+		switch mode {
+		case constants.LockingModeStrict, constants.LockingModeBestEffort:
+			return mode
+		default:
+			return defaultMode
+		}
+	}
+
+	return defaultMode
 }
 
 // SessionRecordingMode returns the session recording mode for SSH sessions.

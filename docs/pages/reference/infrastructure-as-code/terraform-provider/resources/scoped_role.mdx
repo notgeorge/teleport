@@ -125,11 +125,13 @@ Optional:
 Optional:
 
 - `client_idle_timeout` (String) ClientIdleTimeout overrides the defaults block idle timeout specifically for SSH sessions. Must be a valid Go duration string (e.g. "30m", "1h"). If empty, the defaults block value (or global default) applies.
+- `disconnect_expired_cert` (Boolean) DisconnectExpiredCert controls whether SSH sessions are disconnected when the user certificate expires. If unset, cluster-wide auth preference applies.
 - `file_copy` (Boolean) FileCopy indicates whether remote file operations via SCP or SFTP are allowed over an SSH session. It defaults to allowing the user to download and upload files by default.
 - `forward_agent` (Boolean) ForwardAgent enables SSH agent forwarding.
 - `host_sudoers` (List of String) Sudoers is a list of entries to include in a users sudoer file
 - `host_user_creation` (Attributes) HostUserCreation configures the creation of host users. (see [below for nested schema](#nested-schema-for-specsshhost_user_creation))
 - `labels` (Attributes List) Labels is the set of node labels used to dynamically select which nodes this role applies to. (see [below for nested schema](#nested-schema-for-specsshlabels))
+- `lock` (Attributes) Lock configures the role's locking behavior. (see [below for nested schema](#nested-schema-for-specsshlock))
 - `logins` (List of String) Logins is the list of OS logins this role permits on matching nodes.
 - `max_sessions` (Number) MaxSessions defines the maximum number of concurrent sessions per connection.
 - `permit_x11_forwarding` (Boolean) PermitX11Forwarding, when true, authorizes use of X11 forwarding over SSH sessions. If not set, X11 forwarding is not permitted.
@@ -150,6 +152,13 @@ Optional:
 
 - `name` (String) The name of the label.
 - `values` (List of String) The values associated with the label.
+
+
+### Nested Schema for `spec.ssh.lock`
+
+Optional:
+
+- `mode` (String) Allowed values: strict | best_effort
 
 
 ### Nested Schema for `spec.ssh.port_forwarding`

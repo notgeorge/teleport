@@ -183,6 +183,11 @@ func GenSchemaScopedRole(ctx context.Context) (github_com_hashicorp_terraform_pl
 							Optional:    true,
 							Type:        github_com_hashicorp_terraform_plugin_framework_types.StringType,
 						},
+						"disconnect_expired_cert": {
+							Description: "DisconnectExpiredCert controls whether SSH sessions are disconnected when the user certificate expires. If unset, cluster-wide auth preference applies.",
+							Optional:    true,
+							Type:        github_com_hashicorp_terraform_plugin_framework_types.BoolType,
+						},
 						"file_copy": {
 							Description: "FileCopy indicates whether remote file operations via SCP or SFTP are allowed over an SSH session. It defaults to allowing the user to download and upload files by default.",
 							Optional:    true,
@@ -233,6 +238,15 @@ func GenSchemaScopedRole(ctx context.Context) (github_com_hashicorp_terraform_pl
 								},
 							}),
 							Description: "Labels is the set of node labels used to dynamically select which nodes this role applies to.",
+							Optional:    true,
+						},
+						"lock": {
+							Attributes: github_com_hashicorp_terraform_plugin_framework_tfsdk.SingleNestedAttributes(map[string]github_com_hashicorp_terraform_plugin_framework_tfsdk.Attribute{"mode": {
+								Description: "Allowed values: strict | best_effort",
+								Optional:    true,
+								Type:        github_com_hashicorp_terraform_plugin_framework_types.StringType,
+							}}),
+							Description: "Lock configures the role's locking behavior.",
 							Optional:    true,
 						},
 						"logins": {
@@ -1041,6 +1055,60 @@ func CopyScopedRoleFromTerraform(_ context.Context, tf github_com_hashicorp_terr
 													t = &c
 												}
 												obj.FileCopy = t
+											}
+										}
+									}
+									{
+										a, ok := tf.Attrs["disconnect_expired_cert"]
+										if !ok {
+											diags.Append(attrReadMissingDiag{"ScopedRole.spec.ssh.disconnect_expired_cert"})
+										} else {
+											v, ok := a.(github_com_hashicorp_terraform_plugin_framework_types.Bool)
+											if !ok {
+												diags.Append(attrReadConversionFailureDiag{"ScopedRole.spec.ssh.disconnect_expired_cert", "github.com/hashicorp/terraform-plugin-framework/types.Bool"})
+											} else {
+												var t *bool
+												if !v.Null && !v.Unknown {
+													c := bool(v.Value)
+													t = &c
+												}
+												obj.DisconnectExpiredCert = t
+											}
+										}
+									}
+									{
+										a, ok := tf.Attrs["lock"]
+										if !ok {
+											diags.Append(attrReadMissingDiag{"ScopedRole.spec.ssh.lock"})
+										} else {
+											v, ok := a.(github_com_hashicorp_terraform_plugin_framework_types.Object)
+											if !ok {
+												diags.Append(attrReadConversionFailureDiag{"ScopedRole.spec.ssh.lock", "github.com/hashicorp/terraform-plugin-framework/types.Object"})
+											} else {
+												obj.Lock = nil
+												if !v.Null && !v.Unknown {
+													tf := v
+													obj.Lock = &github_com_gravitational_teleport_api_gen_proto_go_teleport_scopes_access_v1.Lock{}
+													obj := obj.Lock
+													{
+														a, ok := tf.Attrs["mode"]
+														if !ok {
+															diags.Append(attrReadMissingDiag{"ScopedRole.spec.ssh.lock.mode"})
+														} else {
+															v, ok := a.(github_com_hashicorp_terraform_plugin_framework_types.String)
+															if !ok {
+																diags.Append(attrReadConversionFailureDiag{"ScopedRole.spec.ssh.lock.mode", "github.com/hashicorp/terraform-plugin-framework/types.String"})
+															} else {
+																var t *string
+																if !v.Null && !v.Unknown {
+																	c := string(v.Value)
+																	t = &c
+																}
+																obj.Mode = t
+															}
+														}
+													}
+												}
 											}
 										}
 									}
@@ -2455,6 +2523,90 @@ func CopyScopedRoleToTerraform(ctx context.Context, obj *github_com_gravitationa
 											}
 											v.Unknown = false
 											tf.Attrs["file_copy"] = v
+										}
+									}
+									{
+										t, ok := tf.AttrTypes["disconnect_expired_cert"]
+										if !ok {
+											diags.Append(attrWriteMissingDiag{"ScopedRole.spec.ssh.disconnect_expired_cert"})
+										} else {
+											v, ok := tf.Attrs["disconnect_expired_cert"].(github_com_hashicorp_terraform_plugin_framework_types.Bool)
+											if !ok {
+												i, err := t.ValueFromTerraform(ctx, github_com_hashicorp_terraform_plugin_go_tftypes.NewValue(t.TerraformType(ctx), nil))
+												if err != nil {
+													diags.Append(attrWriteGeneralError{"ScopedRole.spec.ssh.disconnect_expired_cert", err})
+												}
+												v, ok = i.(github_com_hashicorp_terraform_plugin_framework_types.Bool)
+												if !ok {
+													diags.Append(attrWriteConversionFailureDiag{"ScopedRole.spec.ssh.disconnect_expired_cert", "github.com/hashicorp/terraform-plugin-framework/types.Bool"})
+												}
+											}
+											if obj.DisconnectExpiredCert == nil {
+												v.Null = true
+											} else {
+												v.Null = false
+												v.Value = bool(*obj.DisconnectExpiredCert)
+											}
+											v.Unknown = false
+											tf.Attrs["disconnect_expired_cert"] = v
+										}
+									}
+									{
+										a, ok := tf.AttrTypes["lock"]
+										if !ok {
+											diags.Append(attrWriteMissingDiag{"ScopedRole.spec.ssh.lock"})
+										} else {
+											o, ok := a.(github_com_hashicorp_terraform_plugin_framework_types.ObjectType)
+											if !ok {
+												diags.Append(attrWriteConversionFailureDiag{"ScopedRole.spec.ssh.lock", "github.com/hashicorp/terraform-plugin-framework/types.ObjectType"})
+											} else {
+												v, ok := tf.Attrs["lock"].(github_com_hashicorp_terraform_plugin_framework_types.Object)
+												if !ok {
+													v = github_com_hashicorp_terraform_plugin_framework_types.Object{
+
+														AttrTypes: o.AttrTypes,
+														Attrs:     make(map[string]github_com_hashicorp_terraform_plugin_framework_attr.Value, len(o.AttrTypes)),
+													}
+												} else {
+													if v.Attrs == nil {
+														v.Attrs = make(map[string]github_com_hashicorp_terraform_plugin_framework_attr.Value, len(tf.AttrTypes))
+													}
+												}
+												if obj.Lock == nil {
+													v.Null = true
+												} else {
+													obj := obj.Lock
+													tf := &v
+													{
+														t, ok := tf.AttrTypes["mode"]
+														if !ok {
+															diags.Append(attrWriteMissingDiag{"ScopedRole.spec.ssh.lock.mode"})
+														} else {
+															v, ok := tf.Attrs["mode"].(github_com_hashicorp_terraform_plugin_framework_types.String)
+															if !ok {
+																i, err := t.ValueFromTerraform(ctx, github_com_hashicorp_terraform_plugin_go_tftypes.NewValue(t.TerraformType(ctx), nil))
+																if err != nil {
+																	diags.Append(attrWriteGeneralError{"ScopedRole.spec.ssh.lock.mode", err})
+																}
+																v, ok = i.(github_com_hashicorp_terraform_plugin_framework_types.String)
+																if !ok {
+																	diags.Append(attrWriteConversionFailureDiag{"ScopedRole.spec.ssh.lock.mode", "github.com/hashicorp/terraform-plugin-framework/types.String"})
+																}
+															}
+															if obj.Mode == nil {
+																v.Null = true
+															} else {
+																v.Null = false
+																v.Value = string(*obj.Mode)
+															}
+															v.Unknown = false
+															tf.Attrs["mode"] = v
+														}
+													}
+												}
+												v.Unknown = false
+												tf.Attrs["lock"] = v
+											}
 										}
 									}
 								}
