@@ -16,11 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {
+  BBLP_THEME,
+  createThemeSystem,
+  ThemeProvider as NewThemeProvider,
+  TELEPORT_THEME,
+} from '@gravitational/design-system';
 import { Preview } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { initialize, mswLoader } from 'msw-storybook-addon';
-import { ComponentType, PropsWithChildren } from 'react';
+import { PropsWithChildren } from 'react';
 import { sb } from 'storybook/test';
 
 import Box from '../packages/design/src/Box';
@@ -90,34 +96,48 @@ interface ThemeDecoratorProps {
   title: string;
 }
 
-function ThemeDecorator(props: PropsWithChildren<ThemeDecoratorProps>) {
-  let ThemeProvider: ComponentType<PropsWithChildren<{ theme: Theme }>>;
-  let theme: Theme = resolveTheme(darkTheme);
+const teleportThemeSystem = createThemeSystem(TELEPORT_THEME.config);
+const bblpThemeSystem = createThemeSystem(BBLP_THEME.config);
 
+function ThemeDecorator(props: PropsWithChildren<ThemeDecoratorProps>) {
   if (props.title.startsWith('Teleterm/')) {
-    ThemeProvider = TeletermThemeProvider;
-    theme = resolveTheme(
+    const theme = resolveTheme(
       props.theme === 'Dark Theme' ? teletermDarkTheme : teletermLightTheme
     );
-  } else {
-    ThemeProvider = ConfiguredThemeProvider;
-    switch (props.theme) {
-      case 'Dark Theme':
-        theme = resolveTheme(darkTheme);
-        break;
-      case 'Light Theme':
-        theme = resolveTheme(lightTheme);
-        break;
-      case 'BBLP Theme':
-        theme = resolveTheme(bblpTheme);
-        break;
-    }
+
+    return (
+      <TeletermThemeProvider theme={theme}>
+        <Box p={3}>{props.children}</Box>
+      </TeletermThemeProvider>
+    );
+  }
+
+  let theme: Theme = resolveTheme(darkTheme);
+  let system = teleportThemeSystem;
+  let forcedTheme: 'light' | 'dark' | undefined = 'dark';
+
+  switch (props.theme) {
+    case 'Dark Theme':
+      theme = resolveTheme(darkTheme);
+      forcedTheme = 'dark';
+      break;
+    case 'Light Theme':
+      theme = resolveTheme(lightTheme);
+      forcedTheme = 'light';
+      break;
+    case 'BBLP Theme':
+      theme = resolveTheme(bblpTheme);
+      system = bblpThemeSystem;
+      forcedTheme = undefined;
+      break;
   }
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box p={3}>{props.children}</Box>
-    </ThemeProvider>
+    <NewThemeProvider system={system} forcedTheme={forcedTheme}>
+      <ConfiguredThemeProvider theme={theme}>
+        <Box p={3}>{props.children}</Box>
+      </ConfiguredThemeProvider>
+    </NewThemeProvider>
   );
 }
 
