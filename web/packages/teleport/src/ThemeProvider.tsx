@@ -61,6 +61,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // `UiThemeMode` controls how a theme reacts to user preference:
+  //
+  //   SingleColor  the theme has no light/dark variant (e.g. `bblp`).
+  //                colorMode is left undefined; nothing to force.
+  //   ForcedColor  the theme is locked to one mode (e.g. `mc` is forced
+  //                light). colorMode comes from the theme itself, not
+  //                from `ThemePreference`.
+  //   LightAndDark the theme has both variants (e.g. `teleport`).
+  //                colorMode is derived from `ThemePreference`, falling
+  //                back to the OS `prefers-color-scheme` when UNSPECIFIED.
   const colorMode = useMemo(() => {
     switch (selectedTheme.mode) {
       case UiThemeMode.SingleColor:

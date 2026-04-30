@@ -19,6 +19,9 @@
 import { sharedStyles } from './sharedStyles';
 import { type ThemeDefinition } from './types';
 
+// Color tokens live in the design-system package now, e.g. for bblp:
+// https://github.com/gravitational/design-system/blob/main/src/themes/bblp/colors.ts
+// Only legacy styled-components shape lives here.
 const theme: ThemeDefinition = {
   ...sharedStyles,
   name: 'bblp',

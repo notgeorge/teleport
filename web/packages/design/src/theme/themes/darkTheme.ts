@@ -19,6 +19,10 @@
 import { sharedStyles } from './sharedStyles';
 import { type ThemeDefinition } from './types';
 
+// Color tokens live in the design-system package now, e.g. for teleport
+// (dark + light):
+// https://github.com/gravitational/design-system/blob/main/src/themes/teleport/colors.ts
+// Only legacy styled-components shape lives here.
 const theme: ThemeDefinition = {
   ...sharedStyles,
   name: 'dark',

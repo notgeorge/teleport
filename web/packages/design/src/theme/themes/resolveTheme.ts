@@ -23,9 +23,15 @@ import type { Theme, ThemeDefinition } from './types';
 
 /**
  * Combines a `ThemeDefinition` with the legacy color palette to produce a
- * complete `Theme`. Use anywhere a theme is fed into a styled-components
- * `ThemeProvider` outside the runtime providers (tests, storybook, error
- * fallbacks rendered above the runtime provider).
+ * complete `Theme`.
+ *
+ * "Legacy" here means the styled-components theme that components still
+ * consume via `props.theme`. Its colors are sourced from the new design
+ * system (`LEGACY_THEME_COLORS`) so we don't define them in two places.
+ *
+ * Use this anywhere a styled-components theme is needed outside the runtime
+ * `ThemeProvider` (tests, storybook, error fallbacks rendered above the
+ * runtime provider).
  */
 export function resolveTheme(definition: ThemeDefinition): Theme {
   return {

@@ -47,6 +47,10 @@ export interface TerminalProps {
   disableAutoFocus?: boolean;
 }
 
+// xterm.js needs literal color values (e.g. hex). After the design system
+// migration, theme.colors.* entries are CSS variable references like
+// `var(--teleport-colors-...)`, so we resolve each one against the document's
+// computed styles to get the concrete value xterm expects.
 function createTerminalTheme(theme: ITheme) {
   const values: Record<string, string> = {};
 
