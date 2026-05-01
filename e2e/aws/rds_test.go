@@ -148,7 +148,7 @@ func testRDS(t *testing.T) {
 			Name: db1AdminUser,
 		}, "")
 		require.NoError(t, cluster.Process.GetAuthServer().CreateDatabase(ctx, db1))
-		// for use in tests where admin is not postgres superuser and reassignment_user is set
+		// for use in tests where admin is not postgres superuser and orphaned_resource_owner is set
 		db1WithOrphanedResourceOwner := cloneAndCustomizeDB(t, db, &types.DatabaseAdminUser{
 			Name: db1AdminUser,
 		}, db1OrphanedResourceOwner)
@@ -160,7 +160,7 @@ func testRDS(t *testing.T) {
 			Name: db2AdminUser,
 		}, "")
 		require.NoError(t, cluster.Process.GetAuthServer().CreateDatabase(ctx, db2))
-		// for use in tests where admin is postgres superuser and reassignment_user is set
+		// for use in tests where admin is postgres superuser and orphaned_resource_owner is set
 		db2WithOrphanedResourceOwner := cloneAndCustomizeDB(t, db, &types.DatabaseAdminUser{
 			Name: db2AdminUser,
 		}, db2OrphanedResourceOwner)
@@ -232,8 +232,9 @@ func testRDS(t *testing.T) {
 
 		// provision db1 orphaned_resource_owner user
 		createPGTestUser(t, ctx, conn, db2WithOrphanedResourceOwner.GetOrphanedResourceOwner())
-		// admin must be a member of orphaned_resource_owner to reassign ownership of resources to it;
-		// note that this is unexpected, because a self-hosted postgres SUPERUSER admin does not need this
+		// admin must be a member of orphaned_resource_owner to reassign ownership of resources to it.
+		// We do this because the rds_superuser role under RDS postgres provides lesser privileges than
+		// SUPERUSER on a self-hosted postgres instance. Membership to all users is one of the differences.
 		pgMustExec(t, ctx, conn, fmt.Sprintf("GRANT %q TO %q", db2WithOrphanedResourceOwner.GetOrphanedResourceOwner(), db2WithOrphanedResourceOwner.GetAdminUser().Name))
 
 		// auto role 1 only allows usage of the test schema.

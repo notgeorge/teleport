@@ -542,7 +542,7 @@ func GenSchemaDatabaseV3(ctx context.Context) (github_com_hashicorp_terraform_pl
 					Optional:    true,
 				},
 				"orphaned_resource_owner": {
-					Description: "OrphanedResourceOwner is the database user to transfer resource ownership to at the end of a session where the database user was auto-provisioned.  If the role that was used to log into the database has create_db_user_mode set to best_effort_drop, and OrphanedResourceOwner is not empty, Teleport will attempt to reassign all database objects owned by the user to the user specified by OrphanedResourceOwner prior to dropping the logged-in user.  OrphanedResourceOwner is ignored when create_db_user_mode has a value other than best_effort_drop.",
+					Description: "OrphanedResourceOwner is the database user to transfer resource ownership to at the end of a session where the database user was auto-provisioned.  If the role that was used to log into the database has create_db_user_mode set to best_effort_drop, and OrphanedResourceOwner is not empty, Teleport will attempt to reassign all database objects owned by the user to the user specified by OrphanedResourceOwner prior to dropping the logged-in user.  OrphanedResourceOwner is ignored when user auto-provisioning is disabled, or create_db_user_mode has a value other than best_effort_drop.",
 					Optional:    true,
 					Type:        github_com_hashicorp_terraform_plugin_framework_types.StringType,
 				},

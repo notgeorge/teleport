@@ -1947,8 +1947,8 @@ type DatabaseSpecV3 struct {
 	// attempt to reassign all database objects owned by the user to the user
 	// specified by OrphanedResourceOwner prior to dropping the logged-in user.
 	//
-	// OrphanedResourceOwner is ignored when create_db_user_mode has a value other
-	// than best_effort_drop.
+	// OrphanedResourceOwner is ignored when user auto-provisioning is disabled, or
+	// create_db_user_mode has a value other than best_effort_drop.
 	OrphanedResourceOwner string   `protobuf:"bytes,14,opt,name=OrphanedResourceOwner,proto3" json:"orphaned_resource_owner"`
 	XXX_NoUnkeyedLiteral  struct{} `json:"-"`
 	XXX_unrecognized      []byte   `json:"-"`

@@ -338,8 +338,8 @@ message DatabaseSpecV3 {
   // attempt to reassign all database objects owned by the user to the user
   // specified by OrphanedResourceOwner prior to dropping the logged-in user.
   //
-  // OrphanedResourceOwner is ignored when create_db_user_mode has a value other
-  // than best_effort_drop.
+  // OrphanedResourceOwner is ignored when user auto-provisioning is disabled, or
+  // create_db_user_mode has a value other than best_effort_drop.
   string OrphanedResourceOwner = 14 [(gogoproto.jsontag) = "orphaned_resource_owner"];
 }
 
