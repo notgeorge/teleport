@@ -33,6 +33,7 @@ import (
 	mysqlclient "github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/gravitational/trace"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gravitational/teleport/api/types"
@@ -93,6 +94,7 @@ func testRDS(t *testing.T) {
 	autoUserDropWithReassignment2 := "auto_drop_reassign2_" + randASCII(t) + "@teleport.com"
 	autoRole1 := "auto_granted_role1_" + randASCII(t)
 	autoRole2 := "auto_granted_role2_" + randASCII(t)
+	autoRole3 := "auto_granted_role3_" + randASCII(t)
 
 	testSchema := "test_" + randASCII(t)
 
@@ -119,11 +121,11 @@ func testRDS(t *testing.T) {
 		withUserRole(t, autoUserFineGrain, "db-auto-user-fine-grain", dbAutoUserFineGrainRole),
 		withUserRole(t, autoUserKeep, "db-auto-user-keeper", makeAutoUserKeepRoleSpec(autoRole1, autoRole2)),
 		withUserRole(t, autoUserDrop, "db-auto-user-dropper", makeAutoUserDropRoleSpec(autoRole1, autoRole2)),
-		withUserRole(t, autoUserDropWithReassignment, "db-auto-user-dropper-reassignment", makeAutoUserDropRoleSpec(autoRole1, autoRole2)),
+		withUserRole(t, autoUserDropWithReassignment, "db-auto-user-dropper-reassignment", makeAutoUserDropRoleSpec(autoRole3)),
 		withUserRole(t, autoUserFineGrain2, "db-auto-user-fine-grain", dbAutoUserFineGrainRole),
 		withUserRole(t, autoUserKeep2, "db-auto-user-keeper", makeAutoUserKeepRoleSpec(autoRole1, autoRole2)),
 		withUserRole(t, autoUserDrop2, "db-auto-user-dropper", makeAutoUserDropRoleSpec(autoRole1, autoRole2)),
-		withUserRole(t, autoUserDropWithReassignment2, "db-auto-user-dropper-reassignment", makeAutoUserDropRoleSpec(autoRole1, autoRole2)),
+		withUserRole(t, autoUserDropWithReassignment2, "db-auto-user-dropper-reassignment", makeAutoUserDropRoleSpec(autoRole3)),
 	}
 	cluster := makeDBTestCluster(t, accessRole, discoveryRole, types.AWSMatcherRDS, opts...)
 
@@ -192,7 +194,7 @@ func testRDS(t *testing.T) {
 		cleanupDB(t, ctx, conn, fmt.Sprintf("DROP ROLE IF EXISTS %q", autoUserDropWithReassignment2))
 
 		// create the roles that Teleport will auto assign.
-		for _, r := range [...]string{autoRole1, autoRole2} {
+		for _, r := range [...]string{autoRole1, autoRole2, autoRole3} {
 			createPGTestRole(t, ctx, conn, r)
 		}
 
@@ -202,6 +204,12 @@ func testRDS(t *testing.T) {
 		testTable := "ctf" + randASCII(t) // capture the flag :)
 		createPGTestTable(t, ctx, conn, testSchema, testTable)
 		createPGTestTable(t, ctx, conn, "public", testTable)
+
+		// create table name for testing reassignment under db1 and db2, respectively
+		tableForReassignment1 := "table_for_reassignment1_" + randASCII(t)
+		cleanupDB(t, ctx, conn, fmt.Sprintf("DROP TABLE IF EXISTS public.%q", tableForReassignment1))
+		tableForReassignment2 := "table_for_reassignment2_" + randASCII(t)
+		cleanupDB(t, ctx, conn, fmt.Sprintf("DROP TABLE IF EXISTS public.%q", tableForReassignment2))
 
 		// provision db1 admin that is not a postgres superuser
 		createPGTestUser(t, ctx, conn, db1.GetAdminUser().Name)
@@ -233,6 +241,9 @@ func testRDS(t *testing.T) {
 		// a user needs to have both roles to select from the test table.
 		pgMustExec(t, ctx, conn, fmt.Sprintf("GRANT USAGE ON SCHEMA %q TO %q", testSchema, autoRole1))
 		pgMustExec(t, ctx, conn, fmt.Sprintf("GRANT SELECT ON %q.%q TO %q", testSchema, testTable, autoRole2))
+
+		// auto role 3 must allow for creation of tables in the test schema.
+		pgMustExec(t, ctx, conn, fmt.Sprintf("GRANT CREATE ON SCHEMA %q TO %q", testSchema, autoRole3))
 
 		autoRolesQuery := fmt.Sprintf("select 1 from %q.%q", testSchema, testTable)
 		for _, test := range []struct {
@@ -270,24 +281,25 @@ func testRDS(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 				for name, test := range map[string]struct {
-					user            string
-					dbUser          string
-					db              types.Database
-					query           string
-					afterConnTestFn func(t *testing.T)
+					user     string
+					dbUser   string
+					db       types.Database
+					testFunc func(t *testing.T, pgConn *pgconn.PgConn)
 				}{
 					"existing user": {
 						user:   hostUser,
 						dbUser: test.db.GetAdminUser().Name, // admin user already has RDS IAM auth
 						db:     test.db,
-						query:  "select 1",
+						testFunc: func(t *testing.T, pgConn *pgconn.PgConn) {
+							execPGTestQuery(t, pgConn, "select 1")
+						},
 					},
 					"auto user keep": {
 						user:   autoUserKeep,
 						dbUser: autoUserKeep,
 						db:     test.db,
-						query:  autoRolesQuery,
-						afterConnTestFn: func(t *testing.T) {
+						testFunc: func(t *testing.T, pgConn *pgconn.PgConn) {
+							execPGTestQuery(t, pgConn, autoRolesQuery)
 							waitForPostgresAutoUserDeactivate(t, ctx, conn, autoUserKeep)
 						},
 					},
@@ -295,8 +307,8 @@ func testRDS(t *testing.T) {
 						user:   autoUserDrop,
 						dbUser: autoUserDrop,
 						db:     test.db,
-						query:  autoRolesQuery,
-						afterConnTestFn: func(t *testing.T) {
+						testFunc: func(t *testing.T, pgConn *pgconn.PgConn) {
+							execPGTestQuery(t, pgConn, autoRolesQuery)
 							waitForPostgresAutoUserDrop(t, ctx, conn, autoUserDrop)
 						},
 					},
@@ -304,59 +316,57 @@ func testRDS(t *testing.T) {
 						user:   autoUserDropWithReassignment,
 						dbUser: autoUserDropWithReassignment,
 						db:     test.dbWithOrphanedResourceOwner,
-						query:  autoRolesQuery,
-						afterConnTestFn: func(t *testing.T) {
-							// Create test objects as admin and assign to auto-user
-							testTable := "test_reassign_" + randASCII(t)
-							pgMustExec(t, ctx, conn, fmt.Sprintf("CREATE TABLE public.%q (id INT)", testTable))
-							pgMustExec(t, ctx, conn, fmt.Sprintf("ALTER TABLE public.%q OWNER TO %q", testTable, autoUserDropWithReassignment))
-							cleanupDB(t, ctx, conn, fmt.Sprintf("DROP TABLE IF EXISTS public.%q", testTable))
-
-							// Wait for user drop and ownership transfer
-							waitForPostgresAutoUserDropWithReassignment(
-								t, ctx, conn, autoUserDropWithReassignment, test.dbWithOrphanedResourceOwner.GetOrphanedResourceOwner(), testTable)
+						testFunc: func(t *testing.T, pgConn *pgconn.PgConn) {
+							tableForReassignment := "table_for_reassignment_" + randASCII(t)
+							query := fmt.Sprintf("CREATE TABLE %q.%q (id INT)", testSchema, tableForReassignment)
+							cleanupDB(t, ctx, conn, fmt.Sprintf("DROP TABLE IF EXISTS %q.%q", testSchema, tableForReassignment))
+							execPGTestQuery(t, pgConn, query)
+							waitForPostgresAutoUserDrop(t, ctx, conn, autoUserDrop)
+							waitForPostgresTableReassignment(t, ctx, conn,
+								testSchema,
+								test.dbWithOrphanedResourceOwner.GetOrphanedResourceOwner(),
+								tableForReassignment,
+							)
 						},
 					},
 					"db permissions": {
 						user:   autoUserFineGrain,
 						dbUser: autoUserFineGrain,
 						db:     test.db,
-						query: fmt.Sprintf(`
-							SELECT
-								1
-							FROM
-								pg_catalog.pg_range,
-								pg_catalog.pg_proc,
-								information_schema.sql_parts,
-								public.%q,
-								%q.%q
-							`, testTable, testSchema, testTable),
-						afterConnTestFn: func(t *testing.T) {
+						testFunc: func(t *testing.T, pgConn *pgconn.PgConn) {
+							query := fmt.Sprintf(`
+								SELECT
+									1
+								FROM
+									pg_catalog.pg_range,
+									pg_catalog.pg_proc,
+									information_schema.sql_parts,
+									public.%q,
+									%q.%q
+								`, testTable, testSchema, testTable)
+							execPGTestQuery(t, pgConn, query)
 							waitForPostgresAutoUserPermissionsRemoved(t, ctx, conn, autoUserFineGrain)
 						},
 					},
 				} {
 					t.Run(name, func(t *testing.T) {
 						t.Parallel()
-						t.Run("connect", func(t *testing.T) {
-							route := tlsca.RouteToDatabase{
-								ServiceName: test.db.GetName(),
-								Protocol:    defaults.ProtocolPostgres,
-								Username:    test.dbUser,
-								Database:    "postgres",
-							}
-							t.Run("via proxy", func(t *testing.T) {
-								t.Parallel()
-								postgresConnTest(t, cluster, test.user, route, test.query)
-							})
-							t.Run("via local proxy", func(t *testing.T) {
-								t.Parallel()
-								postgresLocalProxyConnTest(t, cluster, test.user, route, test.query)
-							})
-						})
-						if test.afterConnTestFn != nil {
-							test.afterConnTestFn(t)
+						route := tlsca.RouteToDatabase{
+							ServiceName: test.db.GetName(),
+							Protocol:    defaults.ProtocolPostgres,
+							Username:    test.dbUser,
+							Database:    "postgres",
 						}
+						t.Run("connect via proxy", func(t *testing.T) {
+							t.Parallel()
+							pgConn := getPostgresConn(t, cluster, test.user, route)
+							test.testFunc(t, pgConn)
+						})
+						t.Run("connect via local proxy", func(t *testing.T) {
+							t.Parallel()
+							pgConn := getPostgresLocalProxyConn(t, cluster, test.user, route)
+							test.testFunc(t, pgConn)
+						})
 					})
 				}
 			})
@@ -841,41 +851,22 @@ func waitForPostgresAutoUserDrop(t *testing.T, ctx context.Context, conn *pgConn
 	}, autoUserWaitDur, autoUserWaitStep, "waiting for auto user %q to be dropped", user)
 }
 
-func waitForPostgresAutoUserDropWithReassignment(
+func waitForPostgresTableReassignment(
 	t *testing.T,
 	ctx context.Context,
 	conn *pgConn,
-	autoUser string,
+	schemaName string,
 	orphanedResourceOwner string,
 	testTable string,
 ) {
 	t.Helper()
 
-	// First, wait for the user to be dropped
-	waitForSuccess(t, func() error {
-		rows, _ := conn.Query(ctx, "SELECT 1 FROM pg_roles WHERE rolname=$1", autoUser)
-		gotRow := rows.Next()
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return trace.Wrap(err)
-		}
-		if gotRow {
-			return trace.Errorf("user %q should have been dropped automatically after disconnecting", autoUser)
-		}
-		return nil
-	}, autoUserWaitDur, autoUserWaitStep, "waiting for auto user %q to be dropped", autoUser)
-
-	// Verify the test table is now owned by the reassignment user
 	waitForSuccess(t, func() error {
 		rows, _ := conn.Query(ctx, `
-			SELECT u.usename
-			FROM pg_class c
-			JOIN pg_namespace ns ON c.relnamespace = ns.oid
-			LEFT JOIN pg_user u ON c.relowner = u.usesysid
-			WHERE ns.nspname = 'public'
-			  AND c.relname = $1
-			  AND c.relkind = 'r'
-		`, testTable)
+			SELECT tableowner
+			FROM pg_tables
+			WHERE schemaname = $1 AND tablename = $2`,
+			schemaName, testTable)
 
 		var owner string
 		if rows.Next() {
