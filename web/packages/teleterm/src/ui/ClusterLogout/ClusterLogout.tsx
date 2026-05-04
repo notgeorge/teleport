@@ -59,7 +59,7 @@ export function ClusterLogout({
       keepInDOMAfterClose
       onClose={onClose}
       dialogCss={() => ({
-        maxWidth: '450px',
+        maxWidth: '400px',
         width: '100%',
       })}
     >

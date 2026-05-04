@@ -37,7 +37,7 @@ export function UsageData(props: {
       keepInDOMAfterClose
       onClose={props.onCancel}
       dialogCss={() => ({
-        maxWidth: '450px',
+        maxWidth: '400px',
         width: '100%',
       })}
     >
