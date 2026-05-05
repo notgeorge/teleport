@@ -100,7 +100,7 @@ func WithDeltaQuery() IterateOpt {
 	}
 }
 
-// WithDeltaQuery sets [iterateConfig.latestDeltaQuery],
+// WithLatestDeltaQuery sets [iterateConfig.latestDeltaQuery],
 // indicating the client to use "latest" string literal value
 // as the delta token in the Graph API delta query.
 func WithLatestDeltaQuery() IterateOpt {
@@ -327,10 +327,8 @@ func (c *Client) iterateSeq(ctx context.Context, endpoint string, ds DeltaStore,
 	}
 }
 
-// IterateUsersDelta. If the delta cache is empty,
-// returns error if delta cache is empty, suggesting
-// to start with a full scan which sets up latest
-// delta token. A delta token for the user endpont
+// IterateUserDeltas iterates over users delta response.
+// A delta token for the user endpont
 // must be set up before calling this method.
 func (c *Client) IterateUserDeltas(
 	ctx context.Context,
@@ -361,10 +359,8 @@ func (c *Client) IterateUserDeltas(
 	}
 }
 
-// IterateGroupsDelta. If the delta cache is empty,
-// returns error if delta cache is empty, suggesting
-// to start with a full scan which sets up latest
-// delta token. A delta token for the group endpont
+// IterateGroupDeltas iterates over groups delta response.
+// A delta token for the group endpont
 // must be set up before calling this method.
 func (c *Client) IterateGroupDeltas(
 	ctx context.Context,

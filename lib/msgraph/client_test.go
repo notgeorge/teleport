@@ -1183,7 +1183,7 @@ func TestDeltaMethodsWithoutTop(t *testing.T) {
 	}
 
 	const userEndpoint = "users/delta"
-	const groupEndpoint = "users/delta"
+	const groupEndpoint = "groups/delta"
 
 	deltaStore := msgraphtest.NewFakeDeltaStore()
 
