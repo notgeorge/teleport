@@ -62,6 +62,14 @@ spec:
     # Database admin user name.
     name: "teleport-admin"
 
+  # Optional. For self-hosted and RDS-managed PostgreSQL databases using
+  # best_effort_drop mode, specifies a database user to receive ownership of any
+  # objects owned by the auto-provisioned user when the auto-provisioned user is
+  # dropped at session end. This prevents the fallback to keep mode that occurs
+  # when the user owns database objects. Ignored when user auto-provisioning is
+  # disabled, or when create_db_user_mode is not best_effort_drop.
+  orphaned_resource_owner: "teleport-admin"
+
   # MySQL only options.
   mysql:
     # The MySQL server version reported by the Teleport Proxy Service.

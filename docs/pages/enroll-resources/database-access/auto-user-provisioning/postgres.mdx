@@ -61,6 +61,13 @@ allow the admin user to grant and revoke role `reader`:
 ```sql
 GRANT reader TO "teleport-admin" WITH ADMIN OPTION;
 ```
+
+Finally, if you are configuring the `orphaned_resource_owner` option, you must
+provide the admin user with membership to this user. For example, if
+`orphaned_resource_owner` is set to `bob`:
+```sql
+GRANT bob TO "teleport-admin";
+```
 </TabItem>
 <TabItem label="Self-hosted PostgreSQL">
 The self-hosted PostgreSQL admin user must have X.509 authentication configured.
@@ -74,6 +81,13 @@ PostgreSQL role that Teleport will assign to your Teleport user. For example, to
 allow the admin user to grant and revoke role `reader`:
 ```sql
 GRANT reader TO "teleport-admin" WITH ADMIN OPTION;
+```
+
+If you are configuring the `orphaned_resource_owner` option, you must provide the
+admin user with membership to this user. For example, if `orphaned_resource_owner`
+is set to `bob`:
+```sql
+GRANT bob TO "teleport-admin";
 ```
 
 Note that the database must be configured to accept client certificate auth
