@@ -19,6 +19,8 @@
 package common
 
 import (
+	"encoding/hex"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -104,6 +106,47 @@ func TestClustersFromKubeLocalProxyPath(t *testing.T) {
 		_, _, err := ClustersFromKubeLocalProxyPath("/v1/teleport/cm9vdC1jbHVzdGVy/not*base64")
 		require.ErrorContains(t, err, "decoding kube cluster")
 	})
+}
+
+// TestLegacyKubeLocalProxySNI verifies the kubeconfig SNI shape we emit for downgrade compatibility with older tsh versions.
+// TODO(jakealti): DELETE IN v20.0.0.
+func TestLegacyKubeLocalProxySNI(t *testing.T) {
+	const teleportCluster = "teleport.example.com"
+	tests := []struct {
+		name        string
+		kubeCluster string
+		want        string
+	}{
+		{
+			name:        "short kube cluster name keeps hex prefix",
+			kubeCluster: "kube1",
+			want:        "6b75626531." + teleportCluster,
+		},
+		{
+			// 31 bytes → 62-char hex. Just under the limit.
+			name:        "31-byte name (boundary) keeps hex prefix",
+			kubeCluster: strings.Repeat("a", 31),
+			want:        hex.EncodeToString([]byte(strings.Repeat("a", 31))) + "." + teleportCluster,
+		},
+		{
+			// 32 bytes → 64-char hex. Just over the limit.
+			name:        "32-byte name (over boundary) drops hex prefix",
+			kubeCluster: strings.Repeat("a", 32),
+			want:        teleportCluster,
+		},
+		{
+			// 86-byte name → 172-char hex, exceeds RFC 1035's 63-byte label.
+			name:        "long kube cluster name drops the hex prefix",
+			kubeCluster: "loooooooooooooooooooooooooooooooooooooooooong-kube-cluster-exceeding-sixty-three-chars",
+			want:        teleportCluster,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, LegacyKubeLocalProxySNI(teleportCluster, tc.kubeCluster))
+		})
+	}
 }
 
 // TestClustersFromLegacyKubeLocalProxySNI tests the legacy SNI format emitted by

@@ -57,6 +57,23 @@ func ClustersFromKubeLocalProxyPath(path string) (teleportCluster, kubeCluster s
 	return string(tcBytes), string(kcBytes), nil
 }
 
+// LegacyKubeLocalProxySNI returns the legacy <hex(kube)>.<teleport> SNI shape
+// when the hex-encoded kube cluster name fits within RFC 1035's 63-byte DNS label limit,
+// otherwise the bare teleport cluster name.
+// The legacy shape lets older tsh local proxies (pre-URL-based routing) decode
+// the kube cluster identity from the SNI;
+// for kube cluster names too long for the legacy shape,
+// callers fall back to URL-based routing exclusively.
+//
+// TODO(jakealti): DELETE IN v20.0.0 — once URL-based routing is universal.
+func LegacyKubeLocalProxySNI(teleportCluster, kubeCluster string) string {
+	hexKube := hex.EncodeToString([]byte(kubeCluster))
+	if len(hexKube) > 63 {
+		return teleportCluster
+	}
+	return hexKube + "." + teleportCluster
+}
+
 // ClustersFromLegacyKubeLocalProxySNI decodes the legacy local-proxy SNI shape
 // <hex(kube-cluster)>.<teleport-cluster> emitted by tsh versions prior to URL-based routing.
 //
