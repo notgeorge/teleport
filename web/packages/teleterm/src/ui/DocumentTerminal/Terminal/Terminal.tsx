@@ -17,7 +17,7 @@
  */
 
 import { resolveThemeToColors } from '@gravitational/design-system';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import { Box, Flex } from 'design';
@@ -65,10 +65,6 @@ export function Terminal(props: TerminalProps) {
   const [startPtyProcessAttempt, setStartPtyProcessAttempt] =
     useState<Attempt<void>>(makeEmptyAttempt());
   const theme = useTheme();
-  const terminalTheme = useMemo(
-    () => resolveThemeToColors(theme.colors.terminal),
-    [theme]
-  );
 
   useEffect(() => {
     const removeOnStartErrorListener = props.ptyProcess.onStartError(
@@ -86,7 +82,7 @@ export function Terminal(props: TerminalProps) {
       {
         el: refElement.current,
         fontSize: props.fontSize,
-        theme: terminalTheme,
+        theme: resolveThemeToColors(theme.colors.terminal),
         windowsPty: props.windowsPty,
         openContextMenu: props.openContextMenu,
       },
@@ -128,9 +124,11 @@ export function Terminal(props: TerminalProps) {
 
   useEffect(() => {
     if (refCtrl.current) {
-      refCtrl.current.term.options.theme = terminalTheme;
+      refCtrl.current.term.options.theme = resolveThemeToColors(
+        theme.colors.terminal
+      );
     }
-  }, [terminalTheme]);
+  }, [theme]);
 
   return (
     <Flex

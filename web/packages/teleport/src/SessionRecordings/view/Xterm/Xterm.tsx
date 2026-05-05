@@ -17,7 +17,7 @@
  */
 
 import { resolveThemeToColors } from '@gravitational/design-system';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import styled, { useTheme } from 'styled-components';
 
 import { getPlatformType } from 'design/platform';
@@ -50,11 +50,6 @@ export default function Xterm({ tty }: { tty: Tty }) {
     return (e.metaKey || e.ctrlKey) && e.key === 'f';
   }, []);
 
-  const terminalTheme = useMemo(
-    () => resolveThemeToColors(theme.colors.terminal),
-    [theme]
-  );
-
   useEffect(() => {
     if (!refContainer.current) {
       return;
@@ -64,7 +59,7 @@ export default function Xterm({ tty }: { tty: Tty }) {
       el: refContainer.current,
       fontFamily: theme.fonts.mono,
       fontSize: getPlatformType().isMac ? 12 : 14,
-      theme: terminalTheme,
+      theme: resolveThemeToColors(theme.colors.terminal),
     });
 
     terminalPlayer.current = term;
@@ -101,8 +96,10 @@ export default function Xterm({ tty }: { tty: Tty }) {
   }, [tty]);
 
   useEffect(() => {
-    terminalPlayer.current?.updateTheme(terminalTheme);
-  }, [terminalTheme]);
+    terminalPlayer.current?.updateTheme(
+      resolveThemeToColors(theme.colors.terminal)
+    );
+  }, [theme]);
 
   return (
     <>
