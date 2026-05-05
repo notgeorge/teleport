@@ -422,14 +422,21 @@ func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDel
 // SetupLatestDelta configures latest delta token for the given endpoint.
 // Should always be called before iterating over user and group delta API.
 func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) error {
+	oldLink := ds.Get(endpoint)
+	// Wipe out existing cache
+	ds.Clear(endpoint)
 	// Delta API for user and group endpoint
 	// does not support $top query.
 	opts = append(opts, WithLatestDeltaQuery(), WithoutTop())
 
-	// only a single page with a new delta link is expected.
+	// Only a single page with a new delta link is expected.
 	for _, err := range c.iterateSeq(ctx, endpoint, ds, opts...) {
 		if err != nil {
-			return trace.Wrap(err, "setting up user latest delta token")
+			if oldLink != "" {
+				// Preserve existing delta token on error.
+				ds.Set(endpoint, oldLink)
+			}
+			return trace.Wrap(err, "setting up latest delta token")
 		}
 	}
 
