@@ -28,6 +28,7 @@ import (
 
 	apissh "github.com/gravitational/teleport/api/ssh"
 	"github.com/gravitational/teleport/api/utils/sshutils"
+	vnetv1 "github.com/gravitational/teleport/gen/proto/go/teleport/lib/vnet/v1"
 	"github.com/gravitational/teleport/lib/cryptosuites"
 	"github.com/gravitational/teleport/lib/utils"
 )
@@ -161,19 +162,80 @@ func (h *sshHandler) handleTCPConnectorWithTargetConn(
 	return nil
 }
 
+// initiateSSHConn attempts to initiate an SSH connection to the target SSH node using the provided targetConn. If the
+// SSH connection fails to handshake using the "direct" credential mode, we attempt to fall back to initiating the SSH
+// connection using an MFA cert. If the direct connection attempt fails with an error other than a handshake error, we
+// don't attempt the MFA cert fallback and just return the error.
 func (h *sshHandler) initiateSSHConn(ctx context.Context, targetConn net.Conn, user string, agent *sshAgent) (*sshConn, error) {
 	target := h.cfg.target
-	clientConfig, err := h.cfg.sshProvider.sessionSSHConfig(ctx, target, user, agent)
-	if err != nil {
-		return nil, trace.Wrap(err, "building SSH client config")
+
+	config, fallbackErr := h.cfg.sshProvider.sessionSSHConfig(
+		ctx,
+		target,
+		user,
+		agent,
+		vnetv1.SessionSSHConfigCredentialMode_SESSION_SSH_CONFIG_CREDENTIAL_MODE_DIRECT,
+	)
+	if fallbackErr != nil {
+		return nil, trace.Wrap(fallbackErr)
 	}
 
-	clientConn, clientChans, clientReqs, err := apissh.NewClientConn(ctx, targetConn, target.addr, clientConfig)
-	if err != nil {
-		return nil, trace.Wrap(err, "initiating SSH connection to %s@%s", user, target.addr)
+	// First attempt to initiate the SSH connection with the target using the "direct" credential mode, if this fails
+	// with a handshake error we attempt to fall back to initiating the SSH connection using an MFA cert. If the direct
+	// connection attempt fails with an error other than a handshake error we don't attempt the MFA cert fallback and
+	// just return the error.
+	clientConn, clientChans, clientReqs, directErr := apissh.NewClientConn(ctx, targetConn, target.addr, config)
+	if directErr == nil {
+		return &sshConn{
+			conn:  clientConn,
+			chans: clientChans,
+			reqs:  clientReqs,
+		}, nil
 	}
-	log.DebugContext(ctx, "Initiated SSH connection to target", "root_cluster", target.rootCluster,
-		"leaf_cluster", target.leafCluster, "host", target.addr)
+	if !utils.IsHandshakeFailedError(directErr) {
+		return nil, trace.Wrap(directErr)
+	}
+
+	// If we failed to initiate the SSH connection with the "direct" credential mode, attempt to fall back to using an
+	// MFA cert. We need to close the existing targetConn and establish a new one because the previous one is likely in
+	// a bad state after the handshake failure.
+	_ = targetConn.Close()
+
+	// Create a new SSH agent in case the previous one has any state related to the previous connection attempt that
+	// could interfere with the MFA cert fallback attempt. The new agent will have the same keys loaded, so it doesn't
+	// matter that we're creating a new one.
+	fallbackAgent := newSSHAgent()
+
+	// Dial a new connection to the target for the MFA cert fallback. If this fails, we return the original handshake
+	// error from the direct connection attempt since that's more likely to be the root cause of the failure instead of
+	// any error that could happen during the fallback attempt.
+	fallbackTargetConn, err := h.cfg.sshProvider.dial(ctx, target, fallbackAgent)
+	if err != nil {
+		return nil, trace.Wrap(trace.NewAggregate(directErr, err), "dialing target for MFA cert fallback")
+	}
+
+	fallbackConfig, fallbackErr := h.cfg.sshProvider.sessionSSHConfig(
+		ctx,
+		target,
+		user,
+		fallbackAgent,
+		vnetv1.SessionSSHConfigCredentialMode_SESSION_SSH_CONFIG_CREDENTIAL_MODE_MFA_CERT,
+	)
+	if fallbackErr != nil {
+		// Make sure to close the target connection if we failed to get the SSH config for the fallback connection.
+		_ = fallbackTargetConn.Close()
+
+		return nil, trace.Wrap(trace.NewAggregate(directErr, fallbackErr))
+	}
+
+	clientConn, clientChans, clientReqs, fallbackErr = apissh.NewClientConn(ctx, fallbackTargetConn, target.addr, fallbackConfig)
+	if fallbackErr != nil {
+		// Make sure to close the target connection if we failed to initiate the SSH connection for the fallback connection.
+		_ = fallbackTargetConn.Close()
+
+		return nil, trace.Wrap(trace.NewAggregate(directErr, fallbackErr))
+	}
+
 	return &sshConn{
 		conn:  clientConn,
 		chans: clientChans,

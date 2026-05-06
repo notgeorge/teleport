@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"net"
+	"slices"
 	"strings"
 
 	"github.com/gravitational/trace"
@@ -32,6 +33,7 @@ import (
 	apissh "github.com/gravitational/teleport/api/ssh"
 	"github.com/gravitational/teleport/api/utils/sshutils"
 	vnetv1 "github.com/gravitational/teleport/gen/proto/go/teleport/lib/vnet/v1"
+	clientssh "github.com/gravitational/teleport/lib/client/ssh"
 	"github.com/gravitational/teleport/lib/cryptosuites"
 )
 
@@ -179,10 +181,16 @@ func (p *sshProvider) sessionSSHConfig(
 	target dialTarget,
 	user string,
 	agent *sshAgent,
+	mode vnetv1.SessionSSHConfigCredentialMode,
 ) (apissh.ClientConfig, error) {
 	// TODO(nklaassen): cache session SSH configs so we don't have to regenerate
 	// every time.
-	resp, err := p.cfg.clt.SessionSSHConfig(ctx, target, user)
+	resp, err := p.cfg.clt.SessionSSHConfig(
+		ctx,
+		target,
+		user,
+		mode,
+	)
 	if err != nil {
 		return apissh.ClientConfig{}, trace.Wrap(err)
 	}
@@ -224,7 +232,8 @@ func (p *sshProvider) sessionSSHConfig(
 	if err != nil {
 		return apissh.ClientConfig{}, trace.Wrap(err)
 	}
-	return apissh.ClientConfig{
+
+	config := apissh.ClientConfig{
 		PublicKeyAuth: apissh.PublicKeyAuthConfig{
 			Signers: func() ([]ssh.Signer, error) {
 				return []ssh.Signer{certSigner}, nil
@@ -232,7 +241,46 @@ func (p *sshProvider) sessionSSHConfig(
 		},
 		User:            user,
 		HostKeyCallback: hostKeyCallback,
-	}, nil
+	}
+
+	// If the credential mode is direct, it means the session SSH cert can be used directly to authenticate to the
+	// target SSH node. In this case we need to set an AuthCallback to perform the session-bound MFA ceremony if the
+	// server requires it.
+	if mode == vnetv1.SessionSSHConfigCredentialMode_SESSION_SSH_CONFIG_CREDENTIAL_MODE_DIRECT {
+		performer := mfaPerformerFunc(
+			func(ctx context.Context, sshSessionID []byte) (string, error) {
+				return p.cfg.clt.PerformSessionMFACeremony(
+					ctx,
+					target.profile,
+					target.leafCluster,
+					sshSessionID,
+				)
+			},
+		)
+
+		config.AuthCallback = func(authCtx *ssh.ClientAuthContext) (ssh.AuthMethod, error) {
+			// If the server responds with partial success for publickey auth method and keyboard-interactive is
+			// allowed, then the server is likely enforcing in-band MFA. In this case, return a keyboard-interactive
+			// callback that will perform the MFA ceremony when invoked.
+			if slices.Contains(authCtx.PartialSuccessMethods, "publickey") &&
+				slices.Contains(authCtx.AllowedMethods, "keyboard-interactive") {
+				return clientssh.KeyboardInteractive(ctx, performer, authCtx.Metadata), nil
+			}
+
+			// Returning nil, nil tells the SSH client there is no additional auth method to offer for this server
+			// response and fallback to the default behavior of trying the next auth method in the list.
+			return nil, nil
+		}
+	}
+
+	return config, nil
+}
+
+type mfaPerformerFunc func(context.Context, []byte) (string, error)
+
+func (f mfaPerformerFunc) PerformSessionMFACeremony(ctx context.Context, sshSessionID []byte) (string, error) {
+	challengeName, err := f(ctx, sshSessionID)
+	return challengeName, trace.Wrap(err)
 }
 
 func buildHostKeyCallback(trustedCAs [][]byte, clock clockwork.Clock) (ssh.HostKeyCallback, error) {

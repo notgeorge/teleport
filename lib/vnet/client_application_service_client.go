@@ -191,14 +191,23 @@ func (c *clientApplicationServiceClient) SignForUserTLS(ctx context.Context, req
 }
 
 // SessionSSHConfig returns user SSH configuration values for an SSH session.
-func (c *clientApplicationServiceClient) SessionSSHConfig(ctx context.Context, target dialTarget, user string) (*vnetv1.SessionSSHConfigResponse, error) {
-	resp, err := c.clt.SessionSSHConfig(ctx, &vnetv1.SessionSSHConfigRequest{
-		Profile:     target.profile,
-		RootCluster: target.rootCluster,
-		LeafCluster: target.leafCluster,
-		Address:     target.addr,
-		User:        user,
-	})
+func (c *clientApplicationServiceClient) SessionSSHConfig(
+	ctx context.Context,
+	target dialTarget,
+	user string,
+	mode vnetv1.SessionSSHConfigCredentialMode,
+) (*vnetv1.SessionSSHConfigResponse, error) {
+	resp, err := c.clt.SessionSSHConfig(
+		ctx,
+		&vnetv1.SessionSSHConfigRequest{
+			Profile:        target.profile,
+			RootCluster:    target.rootCluster,
+			LeafCluster:    target.leafCluster,
+			Address:        target.addr,
+			User:           user,
+			CredentialMode: mode,
+		},
+	)
 	return resp, trace.Wrap(err, "calling SessionSSHConfig rpc")
 }
 
@@ -213,6 +222,28 @@ func (c *clientApplicationServiceClient) SignForSSHSession(ctx context.Context, 
 		return nil, trace.Wrap(err, "calling SignForSSHSession rpc")
 	}
 	return resp.GetSignature(), nil
+}
+
+// PerformSessionMFACeremony performs a session-bound MFA ceremony in the client application process.
+func (c *clientApplicationServiceClient) PerformSessionMFACeremony(
+	ctx context.Context,
+	profile string,
+	leafCluster string,
+	sessionID []byte,
+) (string, error) {
+	resp, err := c.clt.PerformSessionMFACeremony(
+		ctx,
+		&vnetv1.PerformSessionMFACeremonyRequest{
+			Profile:      profile,
+			LeafCluster:  leafCluster,
+			SshSessionId: sessionID,
+		},
+	)
+	if err != nil {
+		return "", trace.Wrap(err, "calling PerformSessionMFACeremony rpc")
+	}
+
+	return resp.GetChallengeName(), nil
 }
 
 // ExchangeSSHKeys sends hostPublicKey to the client application so that it

@@ -316,6 +316,21 @@ func (s *clientApplicationService) SessionSSHConfig(ctx context.Context, req *vn
 		Addr:    req.GetAddress(),
 		Cluster: targetCluster,
 	}
+
+	switch req.GetCredentialMode() {
+	case vnetv1.SessionSSHConfigCredentialMode_SESSION_SSH_CONFIG_CREDENTIAL_MODE_DIRECT:
+		// Direct mode disables the pre-auth MFA check so the target can request in-band MFA during SSH auth.
+		target.MFACheck = &proto.IsMFARequiredResponse{
+			Required:    false,
+			MFARequired: proto.MFARequired_MFA_REQUIRED_NO,
+		}
+
+	case vnetv1.SessionSSHConfigCredentialMode_SESSION_SSH_CONFIG_CREDENTIAL_MODE_MFA_CERT:
+
+	default:
+		return nil, trace.BadParameter("unsupported credential mode %v", req.GetCredentialMode())
+	}
+
 	keyRing, completedMFA, err := clusterClient.SessionSSHKeyRing(ctx, req.GetUser(), target)
 	if err != nil {
 		return nil, trace.Wrap(err, "getting KeyRing for SSH session")
@@ -430,16 +445,32 @@ func (s *clientApplicationService) ExchangeSSHKeys(ctx context.Context, req *vne
 	}, nil
 }
 
-// PerformSessionMFACeremony implements [vnetv1.ClientApplicationServiceServer.PerformSessionMFACeremony]. It is not
-// implemented yet and will return an error if called.
-//
-// TODO(cthach): Implement PerformSessionMFACeremony to allow the admin process to trigger an MFA ceremony in the user
-// process and get the result.
+// PerformSessionMFACeremony implements [vnetv1.ClientApplicationServiceServer.PerformSessionMFACeremony].
 func (s *clientApplicationService) PerformSessionMFACeremony(
-	_ context.Context,
-	_ *vnetv1.PerformSessionMFACeremonyRequest,
+	ctx context.Context,
+	req *vnetv1.PerformSessionMFACeremonyRequest,
 ) (*vnetv1.PerformSessionMFACeremonyResponse, error) {
-	return nil, trace.NotImplemented("PerformSessionMFACeremony is not implemented")
+	switch {
+	case req.GetProfile() == "":
+		return nil, trace.BadParameter("profile must not be empty")
+
+	case len(req.GetSshSessionId()) == 0:
+		return nil, trace.BadParameter("SSH session ID must not be empty")
+	}
+
+	challengeName, err := s.cfg.clientApplication.PerformSessionMFACeremony(
+		ctx,
+		req.GetProfile(),
+		req.GetLeafCluster(),
+		req.GetSshSessionId(),
+	)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+
+	return &vnetv1.PerformSessionMFACeremonyResponse{
+		ChallengeName: challengeName,
+	}, nil
 }
 
 // checkAppKey checks that at least the app profile and name are set, which are

@@ -585,6 +585,10 @@ func (p *fakeClientApp) OnNewSSHSession(ctx context.Context, profileName, rootCl
 	p.onNewSSHSessionCallCount.Add(1)
 }
 
+func (p *fakeClientApp) PerformSessionMFACeremony(_ context.Context, _, _ string, _ []byte) (string, error) {
+	return "", trace.NotImplemented("PerformSessionMFACeremony not implemented")
+}
+
 func (p *fakeClientApp) OnNewAppConnection(_ context.Context, _ *vnetv1.AppKey) error {
 	p.onNewAppConnectionCallCount.Add(1)
 	return nil
