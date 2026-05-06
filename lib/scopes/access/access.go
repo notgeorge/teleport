@@ -255,13 +255,17 @@ func StrongValidateRole(role *scopedaccessv1.ScopedRole) error {
 		return trace.BadParameter("scoped role %q has invalid ssh.max_sessions %d: must be non-negative", role.GetMetadata().GetName(), ms)
 	}
 
-	// verify that lock.Mode is a recognized value
+	// verify that lock.Mode is a recognized value for SSH
 	if lock := role.GetSpec().GetSsh().GetLock(); lock != nil {
-		mode := lock.GetMode()
-		switch constants.LockingMode(mode) {
-		case constants.LockingModeBestEffort, constants.LockingModeStrict:
-		default:
-			return trace.BadParameter("scoped role %q has invalid ssh.locking_mode %q", role.GetMetadata().GetName(), mode)
+		if err := validateLock(lock); err != nil {
+			return trace.BadParameter("scoped role %q has invalid ssh.locking_mode %q", role.GetMetadata().GetName(), lock.GetMode())
+		}
+	}
+
+	// verify that lock.Mode is a recognized value for Kube
+	if lock := role.GetSpec().GetKube().GetLock(); lock != nil {
+		if err := validateLock(lock); err != nil {
+			return trace.BadParameter("scoped role %q has invalid kube.locking_mode %q", role.GetMetadata().GetName(), lock.GetMode())
 		}
 	}
 
@@ -313,6 +317,16 @@ func validateDoesNotContain(values []string, invalidSet string) string {
 	}
 
 	return ""
+}
+
+func validateLock(lock *scopedaccessv1.Lock) error {
+	mode := lock.GetMode()
+	switch constants.LockingMode(mode) {
+	case constants.LockingModeBestEffort, constants.LockingModeStrict:
+	default:
+		return trace.Errorf("invalid lock mode")
+	}
+	return nil
 }
 
 func validateRoleName(name string) error {

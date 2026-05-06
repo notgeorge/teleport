@@ -229,6 +229,7 @@ func baseScopedRole() *scopedaccessv1.ScopedRole {
 		Spec: &scopedaccessv1.ScopedRoleSpec{
 			AssignableScopes: []string{"/foo/bar"},
 			Ssh:              &scopedaccessv1.ScopedRoleSSH{},
+			Kube:             &scopedaccessv1.ScopedRoleKube{},
 		},
 		Version: types.V1,
 	}
@@ -353,11 +354,24 @@ func TestKubeDisconnectExpiredCertNotInClassicRole(t *testing.T) {
 	require.Equal(t, types.NewBool(false), role.GetOptions().DisconnectExpiredCert)
 }
 
-func TestLockingModeNotInClassicRole(t *testing.T) {
+func TestSSHLockingModeNotInClassicRole(t *testing.T) {
 	t.Parallel()
 
 	sr := baseScopedRole()
 	sr.Spec.Ssh.Lock = &scopedaccessv1.Lock{
+		Mode: ptr("strict"),
+	}
+
+	role, err := ScopedRoleToRole(sr, "/foo/bar")
+	require.NoError(t, err)
+	require.Empty(t, string(role.GetOptions().Lock))
+}
+
+func TestKubeLockingModeNotInClassicRole(t *testing.T) {
+	t.Parallel()
+
+	sr := baseScopedRole()
+	sr.Spec.Kube.Lock = &scopedaccessv1.Lock{
 		Mode: ptr("strict"),
 	}
 

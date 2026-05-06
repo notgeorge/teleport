@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/gravitational/teleport/api/constants"
 	scopedaccessv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/scopes/access/v1"
 )
 
@@ -78,6 +79,82 @@ func TestKubeAccessCheckerAdjustDisconnectExpiredCert(t *testing.T) {
 			t.Parallel()
 			checker := newScopedCheckerWithRole(tt.spec).Kube()
 			require.Equal(t, tt.expect, checker.AdjustDisconnectExpiredCert(tt.defaultVal))
+		})
+	}
+}
+
+func TestKubeAccessCheckerLockingMode(t *testing.T) {
+	t.Parallel()
+
+	tts := []struct {
+		name        string
+		spec        *scopedaccessv1.ScopedRoleSpec
+		defaultMode constants.LockingMode
+		expect      constants.LockingMode
+	}{
+		{
+			name: "unset defers to default",
+			spec: &scopedaccessv1.ScopedRoleSpec{
+				Kube: &scopedaccessv1.ScopedRoleKube{},
+			},
+			defaultMode: constants.LockingModeBestEffort,
+			expect:      constants.LockingModeBestEffort,
+		},
+		{
+			name: "strict from role",
+			spec: &scopedaccessv1.ScopedRoleSpec{
+				Kube: &scopedaccessv1.ScopedRoleKube{
+					Lock: &scopedaccessv1.Lock{
+						Mode: ptr(string(constants.LockingModeStrict)),
+					},
+				},
+			},
+			defaultMode: constants.LockingModeBestEffort,
+			expect:      constants.LockingModeStrict,
+		},
+		{
+			name: "best effort from role",
+			spec: &scopedaccessv1.ScopedRoleSpec{
+				Kube: &scopedaccessv1.ScopedRoleKube{
+					Lock: &scopedaccessv1.Lock{
+						Mode: ptr(string(constants.LockingModeBestEffort)),
+					},
+				},
+			},
+			defaultMode: constants.LockingModeStrict,
+			expect:      constants.LockingModeBestEffort,
+		},
+		{
+			name: "invalid value falls back to default",
+			spec: &scopedaccessv1.ScopedRoleSpec{
+				Kube: &scopedaccessv1.ScopedRoleKube{
+
+					Lock: &scopedaccessv1.Lock{
+						Mode: ptr("invalid"),
+					},
+				},
+			},
+			defaultMode: constants.LockingModeStrict,
+			expect:      constants.LockingModeStrict,
+		},
+		{
+			name: "empty mode falls back to default",
+			spec: &scopedaccessv1.ScopedRoleSpec{
+				Kube: &scopedaccessv1.ScopedRoleKube{
+
+					Lock: &scopedaccessv1.Lock{},
+				},
+			},
+			defaultMode: constants.LockingModeStrict,
+			expect:      constants.LockingModeStrict,
+		},
+	}
+
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			checker := newScopedCheckerWithRole(tt.spec).Kube()
+			require.Equal(t, tt.expect, checker.LockingMode(tt.defaultMode))
 		})
 	}
 }

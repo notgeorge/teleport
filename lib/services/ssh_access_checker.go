@@ -85,8 +85,8 @@ func (c *SSHAccessChecker) AdjustDisconnectExpiredCert(disconnect bool) bool {
 		return c.checker.unscopedChecker.AdjustDisconnectExpiredCert(disconnect)
 	}
 
-	if d := c.checker.role.GetSpec().GetSsh().DisconnectExpiredCert; d != nil {
-		return *d
+	if c.checker.role.GetSpec().GetSsh().DisconnectExpiredCert != nil {
+		return c.checker.role.GetSpec().GetSsh().GetDisconnectExpiredCert()
 	}
 
 	return disconnect
@@ -98,8 +98,8 @@ func (c *SSHAccessChecker) LockingMode(defaultMode constants.LockingMode) consta
 		return c.checker.unscopedChecker.LockingMode(defaultMode)
 	}
 
-	if lock := c.checker.role.GetSpec().GetSsh().Lock; lock != nil {
-		mode := constants.LockingMode(lock.GetMode())
+	if c.checker.role.GetSpec().GetSsh().Lock == nil {
+		mode := constants.LockingMode(c.checker.role.GetSpec().GetSsh().GetLock().GetMode())
 		switch mode {
 		case constants.LockingModeStrict, constants.LockingModeBestEffort:
 			return mode

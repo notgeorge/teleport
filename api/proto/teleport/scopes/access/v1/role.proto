@@ -131,7 +131,7 @@ message ScopedRoleSSH {
   // user certificate expires. If unset, cluster-wide auth preference applies.
   optional bool disconnect_expired_cert = 12;
 
-  // Lock configures the role's locking behavior.
+  // Lock configures the role's locking behavior for SSH sessions.
   Lock lock = 13;
 }
 
@@ -161,6 +161,9 @@ message ScopedRoleKube {
   // DisconnectExpiredCert controls whether Kube sessions are disconnected when the user certificate expires. If unset, the
   // cluster-wide auth preference applies
   optional bool disconnect_expired_cert = 6;
+
+  // Lock configures the role's locking behavior for kubernetes sessions.
+  Lock lock = 7;
 }
 
 // ScopedRule maps resources to verbs. This is the underlying type used to describe

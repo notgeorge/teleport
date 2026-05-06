@@ -470,6 +470,9 @@ type authContext struct {
 	// It is false if the target cluster is served by another teleport service or a different
 	// Teleport cluster.
 	isLocalKubernetesCluster bool
+
+	// LockingMode determines the kubernetes' behavior when locks are stale
+	LockingMode constants.LockingMode
 }
 
 func (c authContext) String() string {
@@ -1272,6 +1275,13 @@ func (f *Forwarder) authorize(ctx context.Context, actx *authContext) error {
 	}
 	disconnect := actx.checker.Kube().AdjustDisconnectExpiredCert(authPref.GetDisconnectExpiredCert())
 	actx.disconnectExpiredCert = actx.ScopedContext.GetDisconnectCertExpiryTime(disconnect)
+
+	// Check for the locking mode here so that we can verify whether users can connect or not when not
+	// when the lock is stale.
+	actx.LockingMode = actx.checker.Kube().LockingMode(authPref.GetLockingMode())
+	if err := f.cfg.LockWatcher.CheckLockInForce(actx.LockingMode, actx.LockTargets()...); err != nil {
+		return trace.Wrap(err)
+	}
 
 	// If the user has active Access requests we need to validate that they allow
 	// the kubeResource.
@@ -2610,6 +2620,7 @@ func (s *clusterSession) monitorConn(conn net.Conn, err error, hostID string) (n
 		Emitter:               s.parent.cfg.AuthClient,
 		EmitterContext:        s.parent.ctx,
 		MessageWriter:         formatForwardResponseError(s.sendErrStatus),
+		LockingMode:           s.LockingMode,
 	})
 	if err != nil {
 		tc.CloseWithCause(err)

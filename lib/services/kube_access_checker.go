@@ -23,6 +23,7 @@ import (
 
 	"github.com/gravitational/trace"
 
+	"github.com/gravitational/teleport/api/constants"
 	"github.com/gravitational/teleport/api/types"
 )
 
@@ -100,8 +101,27 @@ func (c *KubeAccessChecker) AdjustDisconnectExpiredCert(disconnect bool) bool {
 	if !c.checker.isScoped() {
 		return c.checker.unscopedChecker.AdjustDisconnectExpiredCert(disconnect)
 	}
-	if d := c.checker.role.GetSpec().GetKube().DisconnectExpiredCert; d != nil {
-		return *d
+	if c.checker.role.GetSpec().GetKube().DisconnectExpiredCert != nil {
+		return c.checker.role.GetSpec().GetKube().GetDisconnectExpiredCert()
 	}
 	return disconnect
+}
+
+// LockingMode returns the SSH lock enforcement mode to apply.
+func (c *KubeAccessChecker) LockingMode(defaultMode constants.LockingMode) constants.LockingMode {
+	if !c.checker.isScoped() {
+		return c.checker.unscopedChecker.LockingMode(defaultMode)
+	}
+
+	if c.checker.role.GetSpec().GetKube().GetLock() != nil {
+		mode := constants.LockingMode(c.checker.role.GetSpec().GetSsh().GetLock().GetMode())
+		switch mode {
+		case constants.LockingModeStrict, constants.LockingModeBestEffort:
+			return mode
+		default:
+			return defaultMode
+		}
+	}
+
+	return defaultMode
 }

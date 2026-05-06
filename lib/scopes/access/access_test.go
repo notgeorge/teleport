@@ -458,6 +458,69 @@ func TestValidateRole(t *testing.T) {
 			strongOk: false,
 			weakOk:   true,
 		},
+		{
+			name: "invalid kube.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Kube: &scopedaccessv1.ScopedRoleKube{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String("invalid"),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: false,
+			weakOk:   true,
+		},
+		{
+			name: "valid Kube.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Kube: &scopedaccessv1.ScopedRoleKube{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String(string(constants.LockingModeStrict)),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: true,
+			weakOk:   true,
+		},
+		{
+			name: "empty ssh.lock.mode",
+			role: &scopedaccessv1.ScopedRole{
+				Kind: KindScopedRole,
+				Metadata: &headerv1.Metadata{
+					Name: "test",
+				},
+				Scope: "/",
+				Spec: &scopedaccessv1.ScopedRoleSpec{
+					AssignableScopes: []string{"/foo"},
+					Kube: &scopedaccessv1.ScopedRoleKube{
+						Lock: &scopedaccessv1.Lock{
+							Mode: proto.String(""),
+						},
+					},
+				},
+				Version: types.V1,
+			},
+			strongOk: false,
+			weakOk:   true,
+		},
 	}
 
 	for _, tt := range tts {
@@ -1319,7 +1382,11 @@ func TestStrongValidateRoleSpecAllFieldsValidated(t *testing.T) {
 			Labels: []*labelv1.Label{
 				{Name: "env", Values: []string{"prod"}},
 			},
-			ClientIdleTimeout: "1h",
+			ClientIdleTimeout:     "1h",
+			DisconnectExpiredCert: ptr(true),
+			Lock: &scopedaccessv1.Lock{
+				Mode: ptr("strict"),
+			},
 		},
 	}
 

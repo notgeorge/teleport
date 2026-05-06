@@ -307,7 +307,7 @@ type ScopedRoleSSH struct {
 	// DisconnectExpiredCert controls whether SSH sessions are disconnected when the
 	// user certificate expires. If unset, cluster-wide auth preference applies.
 	DisconnectExpiredCert *bool `protobuf:"varint,12,opt,name=disconnect_expired_cert,json=disconnectExpiredCert,proto3,oneof" json:"disconnect_expired_cert,omitempty"`
-	// Lock configures the role's locking behavior.
+	// Lock configures the role's locking behavior for SSH sessions.
 	Lock          *Lock `protobuf:"bytes,13,opt,name=lock,proto3" json:"lock,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -447,8 +447,10 @@ type ScopedRoleKube struct {
 	// DisconnectExpiredCert controls whether Kube sessions are disconnected when the user certificate expires. If unset, the
 	// cluster-wide auth preference applies
 	DisconnectExpiredCert *bool `protobuf:"varint,6,opt,name=disconnect_expired_cert,json=disconnectExpiredCert,proto3,oneof" json:"disconnect_expired_cert,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Lock configures the role's locking behavior for kubernetes sessions.
+	Lock          *Lock `protobuf:"bytes,7,opt,name=lock,proto3" json:"lock,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScopedRoleKube) Reset() {
@@ -514,6 +516,13 @@ func (x *ScopedRoleKube) GetDisconnectExpiredCert() bool {
 		return *x.DisconnectExpiredCert
 	}
 	return false
+}
+
+func (x *ScopedRoleKube) GetLock() *Lock {
+	if x != nil {
+		return x.Lock
+	}
+	return nil
 }
 
 // ScopedRule maps resources to verbs. This is the underlying type used to describe
@@ -868,13 +877,14 @@ const file_teleport_scopes_access_v1_role_proto_rawDesc = "" +
 	"\r_max_sessionsB\f\n" +
 	"\n" +
 	"_file_copyB\x1a\n" +
-	"\x18_disconnect_expired_cert\"\x8a\x02\n" +
+	"\x18_disconnect_expired_cert\"\xbf\x02\n" +
 	"\x0eScopedRoleKube\x120\n" +
 	"\x06labels\x18\x01 \x03(\v2\x18.teleport.label.v1.LabelR\x06labels\x12\x16\n" +
 	"\x06groups\x18\x02 \x03(\tR\x06groups\x12\x14\n" +
 	"\x05users\x18\x03 \x03(\tR\x05users\x12.\n" +
 	"\x13client_idle_timeout\x18\x05 \x01(\tR\x11clientIdleTimeout\x12;\n" +
-	"\x17disconnect_expired_cert\x18\x06 \x01(\bH\x00R\x15disconnectExpiredCert\x88\x01\x01B\x1a\n" +
+	"\x17disconnect_expired_cert\x18\x06 \x01(\bH\x00R\x15disconnectExpiredCert\x88\x01\x01\x123\n" +
+	"\x04lock\x18\a \x01(\v2\x1f.teleport.scopes.access.v1.LockR\x04lockB\x1a\n" +
 	"\x18_disconnect_expired_certJ\x04\b\x04\x10\x05R\tresources\"@\n" +
 	"\n" +
 	"ScopedRule\x12\x1c\n" +
@@ -939,13 +949,14 @@ var file_teleport_scopes_access_v1_role_proto_depIdxs = []int32{
 	9,  // 8: teleport.scopes.access.v1.ScopedRoleSSH.host_user_creation:type_name -> teleport.scopes.access.v1.CreateHostUser
 	10, // 9: teleport.scopes.access.v1.ScopedRoleSSH.lock:type_name -> teleport.scopes.access.v1.Lock
 	12, // 10: teleport.scopes.access.v1.ScopedRoleKube.labels:type_name -> teleport.label.v1.Label
-	7,  // 11: teleport.scopes.access.v1.SSHPortForwarding.local:type_name -> teleport.scopes.access.v1.SSHLocalPortForwarding
-	8,  // 12: teleport.scopes.access.v1.SSHPortForwarding.remote:type_name -> teleport.scopes.access.v1.SSHRemotePortForwarding
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	10, // 11: teleport.scopes.access.v1.ScopedRoleKube.lock:type_name -> teleport.scopes.access.v1.Lock
+	7,  // 12: teleport.scopes.access.v1.SSHPortForwarding.local:type_name -> teleport.scopes.access.v1.SSHLocalPortForwarding
+	8,  // 13: teleport.scopes.access.v1.SSHPortForwarding.remote:type_name -> teleport.scopes.access.v1.SSHRemotePortForwarding
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_teleport_scopes_access_v1_role_proto_init() }
