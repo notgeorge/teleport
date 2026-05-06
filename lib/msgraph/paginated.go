@@ -50,16 +50,6 @@ type iterateConfig struct {
 	// count is the $count query param.
 	// https://learn.microsoft.com/en-us/graph/query-parameters?tabs=http#count
 	count bool
-	// latestDeltaToken indicates to use "latest" string literal
-	// as the delta token. Using "latest" token returns
-	// a latest delta token for the queried delta endpoint.
-	latestDeltaQuery bool
-	// deltaQuery indicates to use delta query.
-	deltaQuery bool
-	// withoutTop indicates to make API request without the $top query,
-	// which is added by default. Endpoints such as Graph delta API do not
-	// support the $top query and risk breaking the request.
-	withoutTop bool
 }
 
 func (ic *iterateConfig) query() url.Values {
@@ -67,7 +57,7 @@ func (ic *iterateConfig) query() url.Values {
 	if ic.filter != "" {
 		q.Set("$filter", ic.filter)
 	}
-	if ic.top > 0 && !ic.withoutTop {
+	if ic.top > 0 {
 		q.Set("$top", strconv.Itoa(ic.top))
 	}
 	if ic.selector != "" {
@@ -75,9 +65,6 @@ func (ic *iterateConfig) query() url.Values {
 	}
 	if ic.count {
 		q.Set("$count", "true")
-	}
-	if ic.latestDeltaQuery {
-		q.Set("$deltatoken", "latest")
 	}
 	return q
 }
@@ -89,34 +76,18 @@ func (c *Client) newIterateConfig() *iterateConfig {
 	}
 }
 
+// newIterateConfigDelta creates a new iterateConfig.
+// It does not set up $top query as newIterateConfig does because
+// some delta endpoints like user and groups does not support it.
+// Clients can explicitly pass WithTop() to include it.
+func (c *Client) newIterateConfigDelta() *iterateConfig {
+	return &iterateConfig{
+		header: make(http.Header),
+	}
+}
+
 // IterateOpt is a function that can be passed to [Client] methods that iterate over API results.
 type IterateOpt func(*iterateConfig)
-
-// WithDeltaQuery sets [iterateConfig.deltaQuery],
-// indicating the client to use Graph API delta query.
-func WithDeltaQuery() IterateOpt {
-	return func(ic *iterateConfig) {
-		ic.deltaQuery = true
-	}
-}
-
-// WithLatestDeltaQuery sets [iterateConfig.latestDeltaQuery],
-// indicating the client to use "latest" string literal value
-// as the delta token in the Graph API delta query.
-func WithLatestDeltaQuery() IterateOpt {
-	return func(ic *iterateConfig) {
-		ic.latestDeltaQuery = true
-	}
-}
-
-// WithoutTop sets [iterateConfig.withoutTop],
-// indicating the client to not to use the
-// default $top query.
-func WithoutTop() IterateOpt {
-	return func(ic *iterateConfig) {
-		ic.withoutTop = true
-	}
-}
 
 // WithFilter sets the $filter query param.
 // https://learn.microsoft.com/en-us/graph/filter-query-parameter?tabs=http
@@ -254,49 +225,46 @@ func (c *Client) IterateUsers(ctx context.Context, f func(*models.User) bool, op
 	return iterateSimple(c, ctx, "users", f, opts...)
 }
 
-// iterateSeq implements pagination for "list" endpoints.
-// It supports working with Graph delta API.
-func (c *Client) iterateSeq(ctx context.Context, endpoint string, ds DeltaStore, iterateOpts ...IterateOpt) iter.Seq2[json.RawMessage, error] {
-	ic := c.newIterateConfig()
-	for _, opt := range iterateOpts {
-		opt(ic)
-	}
-
-	var uriString string
-	if ic.deltaQuery {
-		deltaURI := ds.Get(endpoint)
-		if deltaURI == "" {
-			return func(yield func(json.RawMessage, error) bool) {
-				yield(nil, trace.Wrap(ErrMissingDeltaLink))
-			}
+// iterateDelta implements pagination for Graph delta API endpoints.
+// It expects a valid delta link for the [endpoint] available in the [ds].
+func (c *Client) iterateDelta(ctx context.Context, endpoint string, ds DeltaStore) iter.Seq2[json.RawMessage, error] {
+	if ds == nil {
+		return func(yield func(json.RawMessage, error) bool) {
+			yield(nil, trace.BadParameter("missing delta store"))
 		}
-
-		// Below, the delta link host is checked against the baseURL host
-		// which has already gone through validation when constructing the
-		// graph client. This isn't strictly necessary because as per the delta
-		// API docs, the client must save the whole delta link and use it as it
-		// is in the next delta request.
-		// https://learn.microsoft.com/en-us/graph/delta-query-overview#state-tokens
-		// https://learn.microsoft.com/en-us/graph/api/group-delta?view=graph-rest-1.0&tabs=http
-		if err := validateDeltaLink(c.baseURL, deltaURI); err != nil {
-			return func(yield func(json.RawMessage, error) bool) {
-				yield(nil, trace.Wrap(err))
-			}
+	}
+	deltaURI := ds.Get(endpoint)
+	if deltaURI == "" {
+		return func(yield func(json.RawMessage, error) bool) {
+			yield(nil, trace.Wrap(ErrMissingDeltaLink))
 		}
+	}
 
-		uriString = deltaURI
+	// Below, the delta link host is checked against the baseURL host
+	// which has already gone through validation when constructing the
+	// graph client. This isn't strictly necessary because as per the delta
+	// API docs, the client must save the whole delta link and use it as it
+	// is in the next delta request.
+	// https://learn.microsoft.com/en-us/graph/delta-query-overview#state-tokens
+	// https://learn.microsoft.com/en-us/graph/api/group-delta?view=graph-rest-1.0&tabs=http
+	if err := validateDeltaLink(c.baseURL, deltaURI); err != nil {
+		return func(yield func(json.RawMessage, error) bool) {
+			yield(nil, trace.Wrap(err))
+		}
 	}
-	if uriString == "" {
-		uri := *c.baseURL
-		uri.Path = path.Join(uri.Path, endpoint)
-		uri.RawQuery = ic.query().Encode()
-		uriString = uri.String()
-	}
+
+	// For the first request, uriString will be the same as deltaURI.
+	// If response is paginated, uriString will be assigned
+	// with a new NextLink.
+	uriString := deltaURI
+	// No extra headers expected for delta query.
+	header := make(http.Header)
+
 	return func(yield func(json.RawMessage, error) bool) {
 		var deltaLink string
 
 		for uriString != "" {
-			resp, err := c.request(ctx, http.MethodGet, uriString, ic.header, nil /* payload */)
+			resp, err := c.request(ctx, http.MethodGet, uriString, header, nil /* payload */)
 			if err != nil {
 				yield(nil, trace.Wrap(err))
 				return
@@ -334,13 +302,9 @@ func (c *Client) IterateUserDeltas(
 	ctx context.Context,
 	endpoint string,
 	ds DeltaStore,
-	opts ...IterateOpt,
 ) iter.Seq2[*models.ListUsersDeltaResponse, error] {
-	// SetupLatestDelta should have setup the delta query without the $top
-	// query. WithoutTop() is added here only as an additional check.
-	opts = append(opts, WithDeltaQuery(), WithoutTop())
 	return func(yield func(*models.ListUsersDeltaResponse, error) bool) {
-		for msg, iterErr := range c.iterateSeq(ctx, endpoint, ds, opts...) {
+		for msg, iterErr := range c.iterateDelta(ctx, endpoint, ds) {
 			if iterErr != nil {
 				yield(nil, trace.Wrap(iterErr))
 				return
@@ -366,13 +330,9 @@ func (c *Client) IterateGroupDeltas(
 	ctx context.Context,
 	endpoint string,
 	ds DeltaStore,
-	opts ...IterateOpt,
 ) iter.Seq2[*models.ListGroupsDeltaResponse, error] {
-	// SetupLatestDelta should have setup the delta query without the $top
-	// query. WithoutTop() is added here only as an additional check.
-	opts = append(opts, WithDeltaQuery(), WithoutTop())
 	return func(yield func(*models.ListGroupsDeltaResponse, error) bool) {
-		for msg, iterErr := range c.iterateSeq(ctx, endpoint, ds, opts...) {
+		for msg, iterErr := range c.iterateDelta(ctx, endpoint, ds) {
 			if iterErr != nil {
 				yield(nil, trace.Wrap(iterErr))
 				return
@@ -417,24 +377,49 @@ func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDel
 
 // SetupLatestDelta configures latest delta token for the given endpoint.
 // Should always be called before iterating over user and group delta API.
-func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) error {
-	oldLink := ds.Get(endpoint)
-	// Wipe out existing cache
-	ds.Clear(endpoint)
-	// Delta API for user and group endpoint
-	// does not support $top query.
-	opts = append(opts, WithLatestDeltaQuery(), WithoutTop())
-
-	// Only a single page with a new delta link is expected.
-	for _, err := range c.iterateSeq(ctx, endpoint, ds, opts...) {
-		if err != nil {
-			if oldLink != "" {
-				// Preserve existing delta token on error.
-				ds.Set(endpoint, oldLink)
-			}
-			return trace.Wrap(err, "setting up latest delta token")
-		}
+func (c *Client) SetupLatestDelta(ctx context.Context, endpoint string, ds DeltaStore, opts ...IterateOpt) (err error) {
+	if ds == nil {
+		return trace.BadParameter("missing delta store")
 	}
+
+	// Wipe out existing cache but preserve older link on error.
+	oldLink := ds.Get(endpoint)
+	defer func() {
+		if err != nil && oldLink != "" {
+			ds.Set(endpoint, oldLink)
+		}
+	}()
+	ds.Clear(endpoint)
+
+	// Configure URL. At minimum, this needs $deltatoken=latest
+	// and $select query passed by the caller.
+	ic := c.newIterateConfigDelta()
+	for _, opt := range opts {
+		opt(ic)
+	}
+	q := ic.query()
+	q.Set("$deltatoken", "latest")
+	uri := *c.baseURL
+	uri.Path = path.Join(uri.Path, endpoint)
+	uri.RawQuery = q.Encode()
+	uriString := uri.String()
+
+	var resp *http.Response
+	resp, err = c.request(ctx, http.MethodGet, uriString, ic.header, nil /* payload */)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	defer resp.Body.Close()
+
+	var page models.ODataPage
+	if err = jsoniter.ConfigFastest.NewDecoder(resp.Body).Decode(&page); err != nil {
+		return trace.Wrap(err)
+	}
+	if page.DeltaLink == "" {
+		return trace.Errorf("missing delta link in latest delta query response")
+	}
+
+	ds.Set(endpoint, page.DeltaLink)
 
 	return nil
 }

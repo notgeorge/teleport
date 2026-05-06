@@ -1267,7 +1267,7 @@ func TestValidateDeltaLink(t *testing.T) {
 			err = validateDeltaLink(client.baseURL, tt.deltaLink)
 			tt.errorAssertion(t, err)
 
-			for _, err := range client.iterateSeq(ctx, endpoint, ds, WithDeltaQuery()) {
+			for _, err := range client.iterateDelta(ctx, endpoint, ds) {
 				tt.errorAssertion(t, err)
 			}
 		})
