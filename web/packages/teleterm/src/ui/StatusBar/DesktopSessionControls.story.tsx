@@ -28,7 +28,7 @@ export default {
   },
 };
 
-const status: DesktopSessionControlsRenderProps = {
+const controls: DesktopSessionControlsRenderProps = {
   canShareDirectory: true,
   isSharingDirectory: false,
   isSharingClipboard: false,
@@ -43,7 +43,7 @@ const status: DesktopSessionControlsRenderProps = {
 };
 
 export function NoAlerts() {
-  return <DesktopSessionControls status={status} />;
+  return <DesktopSessionControls controls={controls} />;
 }
 
 export function WithAlert() {
@@ -54,6 +54,6 @@ export function WithAlert() {
       id: 'warning-1',
     },
   ] as ToastNotificationItem[];
-  const alertsStatus = { ...status, alerts };
-  return <DesktopSessionControls status={alertsStatus} />;
+  const alertControls = { ...controls, alerts };
+  return <DesktopSessionControls controls={alertControls} />;
 }

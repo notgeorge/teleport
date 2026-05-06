@@ -27,9 +27,9 @@ import type { DesktopSessionControlsRenderProps } from 'shared/components/Deskto
 import { LatencyDiagnostic } from 'shared/components/LatencyDiagnostic';
 
 export function DesktopSessionControls({
-  status,
+  controls,
 }: {
-  status: DesktopSessionControlsRenderProps;
+  controls: DesktopSessionControlsRenderProps;
 }) {
   const theme = useTheme();
 
@@ -41,44 +41,47 @@ export function DesktopSessionControls({
       <Box mx={2}>
         <ResourceIcon name="windows" size="large" />
       </Box>
-      {status.latencyStats && (
-        <LatencyDiagnostic latency={status.latencyStats} />
+      {controls.latencyStats && (
+        <LatencyDiagnostic latency={controls.latencyStats} />
       )}
       <HoverTooltip
         tipContent={directorySharingTooltip(
-          status.canShareDirectory,
-          status.isSharingDirectory
+          controls.canShareDirectory,
+          controls.isSharingDirectory
         )}
         placement="top"
       >
         <FolderShared
           size="small"
           padding="8px"
-          color={iconColor(status.isSharingDirectory)}
+          color={iconColor(controls.isSharingDirectory)}
         />
       </HoverTooltip>
-      <HoverTooltip tipContent={status.clipboardSharingMessage} placement="top">
+      <HoverTooltip
+        tipContent={controls.clipboardSharingMessage}
+        placement="top"
+      >
         <Clipboard
           size="small"
           padding="8px"
-          color={iconColor(status.isSharingClipboard)}
+          color={iconColor(controls.isSharingClipboard)}
         />
       </HoverTooltip>
-      {!!status?.alerts?.length && (
+      {!!controls?.alerts?.length && (
         <AlertDropdown
-          alerts={status.alerts}
-          onRemoveAlert={status.onRemoveAlert}
+          alerts={controls.alerts}
+          onRemoveAlert={controls.onRemoveAlert}
           openUpward
         />
       )}
       <Divider />
       <ActionMenu
         showShareDirectory={
-          status.canShareDirectory && !status.isSharingDirectory
+          controls.canShareDirectory && !controls.isSharingDirectory
         }
-        onShareDirectory={status.onShareDirectory}
-        onCtrlAltDel={status.onCtrlAltDel}
-        onDisconnect={status.onDisconnect}
+        onShareDirectory={controls.onShareDirectory}
+        onCtrlAltDel={controls.onCtrlAltDel}
+        onDisconnect={controls.onDisconnect}
         openUpward
         buttonIconColor="text.slightlyMuted"
       />

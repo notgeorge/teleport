@@ -155,13 +155,13 @@ function DesktopSessionComponent(props: {
         client={client}
         aclAttempt={acl}
         browserSupportsSharing
-        renderControls={status => {
-          if (!(props.visible && status.isConnected)) {
+        renderControls={controls => {
+          if (!(props.visible && controls.isConnected)) {
             return;
           }
 
           return createPortal(
-            <DesktopSessionControls status={status} />,
+            <DesktopSessionControls controls={controls} />,
             props.desktopSessionControlsRef.current
           );
         }}
