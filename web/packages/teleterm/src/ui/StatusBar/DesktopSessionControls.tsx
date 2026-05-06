@@ -37,7 +37,7 @@ export function DesktopSessionControls({
     active ? theme.colors.text.main : theme.colors.text.muted;
 
   return (
-    <Inset alignItems="center">
+    <Inset>
       <Box mx={2}>
         <ResourceIcon name="windows" size="large" />
       </Box>
@@ -86,7 +86,7 @@ export function DesktopSessionControls({
   );
 }
 
-const Inset = styled(Flex)`
+const Inset = styled(Flex).attrs({ alignSelf: 'center', alignItems: 'center' })`
   background: ${({ theme }) => theme.colors.levels.sunken};
   box-shadow:
     0 2px 1px -1px rgba(0, 0, 0, 0.2) inset,

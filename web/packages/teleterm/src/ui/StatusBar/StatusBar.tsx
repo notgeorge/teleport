@@ -130,11 +130,7 @@ export function StatusBar(props: {
             </Text>
           </ButtonPrimary>
         )}
-        <Flex
-          ref={props.desktopSessionControlsRef}
-          alignItems="center"
-          height="100%"
-        />
+        <Flex ref={props.desktopSessionControlsRef} height="100%" />
         <AccessRequestCheckoutButton />
         <ShareFeedback />
       </Flex>
