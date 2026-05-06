@@ -47,9 +47,9 @@ export type DesktopSessionWithSharingProps = {
  * Teleport Connect calls useDesktopSession directly in DocumentDesktopSession
  * so it can publish session state to the status bar.
  */
-export function DesktopSessionWithSharing({
-  ...props
-}: DesktopSessionWithSharingProps) {
+export function DesktopSessionWithSharing(
+  props: DesktopSessionWithSharingProps
+) {
   return (
     <DesktopSession
       {...props}
