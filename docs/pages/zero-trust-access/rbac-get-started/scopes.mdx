@@ -177,10 +177,6 @@ editing her own admin role and locking herself out.
 
 ## Joining a scoped SSH Service
 
-Only static Kubernetes clusters support joining with scopes. Dynamic
-cluster registration, including those discovered by the Teleport Discovery
-Service, dot not yet support scopes.
-
 Log the scoped admin into the desired scope:
 
 ```code
@@ -229,6 +225,10 @@ $ tsh ssh ubuntu@example-node
 ```
 
 ## Joining a scoped Kubernetes Service
+
+Only static Kubernetes clusters support joining with scopes. Dynamic
+cluster registration, including those discovered by the Teleport Discovery
+Service, dot not yet support scopes.
 
 Log the scoped admin into the desired scope:
 
