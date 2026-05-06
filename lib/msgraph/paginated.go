@@ -343,6 +343,7 @@ func (c *Client) IterateGroupDeltas(
 				return
 			}
 			for _, item := range page {
+				item.Owners = filterUnsupportedGroupOwners(item.Owners)
 				item.Members = filterUnsupportedGroupMembers(item.Members)
 				if !yield(item, nil) {
 					return
@@ -352,12 +353,43 @@ func (c *Client) IterateGroupDeltas(
 	}
 }
 
+func filterUnsupportedGroupOwners(in []models.OwnersDelta) []models.OwnersDelta {
+	if in == nil {
+		return nil
+	}
+	out := make([]models.OwnersDelta, 0, len(in))
+	for _, owner := range in {
+		if owner.User == nil {
+			continue
+		}
+		switch owner.Type {
+		case models.ODataUser:
+			out = append(out, models.OwnersDelta{
+				User: &models.User{
+					DirectoryObject: models.DirectoryObject{
+						ID:          owner.ID,
+						DisplayName: owner.DisplayName,
+					},
+				},
+				Type:    owner.Type,
+				Removed: owner.Removed,
+			})
+		default:
+			// owners such as #microsoft.graph.servicePrincipal are discarded.
+		}
+	}
+	return out
+}
+
 func filterUnsupportedGroupMembers(in []models.MembersDelta) []models.MembersDelta {
 	if in == nil {
 		return nil
 	}
 	out := make([]models.MembersDelta, 0, len(in))
 	for _, member := range in {
+		if member.DirectoryObject == nil {
+			continue
+		}
 		switch member.Type {
 		case models.ODataUser, models.ODataGroup:
 			out = append(out, models.MembersDelta{
