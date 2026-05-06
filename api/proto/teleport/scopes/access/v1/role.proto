@@ -157,6 +157,10 @@ message ScopedRoleKube {
   // Must be a valid Go duration string (e.g. "30m", "1h"). If empty, the defaults block value
   // (or global default) applies.
   string client_idle_timeout = 5;
+
+  // DisconnectExpiredCert controls whether Kube sessions are disconnected when the user certificate expires. If unset, the
+  // cluster-wide auth preference applies
+  optional bool disconnect_expired_cert = 6;
 }
 
 // ScopedRule maps resources to verbs. This is the underlying type used to describe

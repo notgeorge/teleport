@@ -85,8 +85,8 @@ func (c *SSHAccessChecker) AdjustDisconnectExpiredCert(disconnect bool) bool {
 		return c.checker.unscopedChecker.AdjustDisconnectExpiredCert(disconnect)
 	}
 
-	if c.checker.role.GetSpec().GetSsh().DisconnectExpiredCert != nil {
-		return c.checker.role.GetSpec().GetSsh().GetDisconnectExpiredCert()
+	if d := c.checker.role.GetSpec().GetSsh().DisconnectExpiredCert; d != nil {
+		return *d
 	}
 
 	return disconnect

@@ -444,8 +444,11 @@ type ScopedRoleKube struct {
 	// Must be a valid Go duration string (e.g. "30m", "1h"). If empty, the defaults block value
 	// (or global default) applies.
 	ClientIdleTimeout string `protobuf:"bytes,5,opt,name=client_idle_timeout,json=clientIdleTimeout,proto3" json:"client_idle_timeout,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// DisconnectExpiredCert controls whether Kube sessions are disconnected when the user certificate expires. If unset, the
+	// cluster-wide auth preference applies
+	DisconnectExpiredCert *bool `protobuf:"varint,6,opt,name=disconnect_expired_cert,json=disconnectExpiredCert,proto3,oneof" json:"disconnect_expired_cert,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *ScopedRoleKube) Reset() {
@@ -504,6 +507,13 @@ func (x *ScopedRoleKube) GetClientIdleTimeout() string {
 		return x.ClientIdleTimeout
 	}
 	return ""
+}
+
+func (x *ScopedRoleKube) GetDisconnectExpiredCert() bool {
+	if x != nil && x.DisconnectExpiredCert != nil {
+		return *x.DisconnectExpiredCert
+	}
+	return false
 }
 
 // ScopedRule maps resources to verbs. This is the underlying type used to describe
@@ -858,12 +868,14 @@ const file_teleport_scopes_access_v1_role_proto_rawDesc = "" +
 	"\r_max_sessionsB\f\n" +
 	"\n" +
 	"_file_copyB\x1a\n" +
-	"\x18_disconnect_expired_cert\"\xb1\x01\n" +
+	"\x18_disconnect_expired_cert\"\x8a\x02\n" +
 	"\x0eScopedRoleKube\x120\n" +
 	"\x06labels\x18\x01 \x03(\v2\x18.teleport.label.v1.LabelR\x06labels\x12\x16\n" +
 	"\x06groups\x18\x02 \x03(\tR\x06groups\x12\x14\n" +
 	"\x05users\x18\x03 \x03(\tR\x05users\x12.\n" +
-	"\x13client_idle_timeout\x18\x05 \x01(\tR\x11clientIdleTimeoutJ\x04\b\x04\x10\x05R\tresources\"@\n" +
+	"\x13client_idle_timeout\x18\x05 \x01(\tR\x11clientIdleTimeout\x12;\n" +
+	"\x17disconnect_expired_cert\x18\x06 \x01(\bH\x00R\x15disconnectExpiredCert\x88\x01\x01B\x1a\n" +
+	"\x18_disconnect_expired_certJ\x04\b\x04\x10\x05R\tresources\"@\n" +
 	"\n" +
 	"ScopedRule\x12\x1c\n" +
 	"\tresources\x18\x01 \x03(\tR\tresources\x12\x14\n" +
@@ -942,6 +954,7 @@ func file_teleport_scopes_access_v1_role_proto_init() {
 		return
 	}
 	file_teleport_scopes_access_v1_role_proto_msgTypes[3].OneofWrappers = []any{}
+	file_teleport_scopes_access_v1_role_proto_msgTypes[4].OneofWrappers = []any{}
 	file_teleport_scopes_access_v1_role_proto_msgTypes[7].OneofWrappers = []any{}
 	file_teleport_scopes_access_v1_role_proto_msgTypes[8].OneofWrappers = []any{}
 	file_teleport_scopes_access_v1_role_proto_msgTypes[10].OneofWrappers = []any{}

@@ -1266,6 +1266,13 @@ func (f *Forwarder) authorize(ctx context.Context, actx *authContext) error {
 		return trace.Wrap(err)
 	}
 
+	authPref, err := f.cfg.CachingAuthClient.GetAuthPreference(ctx)
+	if err != nil {
+		return trace.Wrap(err)
+	}
+	disconnect := actx.checker.Kube().AdjustDisconnectExpiredCert(authPref.GetDisconnectExpiredCert())
+	actx.disconnectExpiredCert = actx.ScopedContext.GetDisconnectCertExpiryTime(disconnect)
+
 	// If the user has active Access requests we need to validate that they allow
 	// the kubeResource.
 	// This is required because CheckAccess does not validate the subresource type.

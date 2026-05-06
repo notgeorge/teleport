@@ -340,6 +340,19 @@ func TestDisconnectExpiredCertNotInClassicRole(t *testing.T) {
 	require.Equal(t, types.NewBool(false), role.GetOptions().DisconnectExpiredCert)
 }
 
+func TestKubeDisconnectExpiredCertNotInClassicRole(t *testing.T) {
+	t.Parallel()
+
+	sr := baseScopedRole()
+	sr.Spec.Kube = &scopedaccessv1.ScopedRoleKube{
+		DisconnectExpiredCert: ptr(true),
+	}
+
+	role, err := ScopedRoleToRole(sr, "/foo/bar")
+	require.NoError(t, err)
+	require.Equal(t, types.NewBool(false), role.GetOptions().DisconnectExpiredCert)
+}
+
 func TestLockingModeNotInClassicRole(t *testing.T) {
 	t.Parallel()
 

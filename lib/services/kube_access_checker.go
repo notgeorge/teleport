@@ -94,3 +94,14 @@ func (c *KubeAccessChecker) AdjustClientIdleTimeout(timeout time.Duration) (time
 	}
 	return max(timeout, 0), nil
 }
+
+// AdjustDisconnectExpiredCert adjusts whether to disconnect on certificate expiry.
+func (c *KubeAccessChecker) AdjustDisconnectExpiredCert(disconnect bool) bool {
+	if !c.checker.isScoped() {
+		return c.checker.unscopedChecker.AdjustDisconnectExpiredCert(disconnect)
+	}
+	if d := c.checker.role.GetSpec().GetKube().DisconnectExpiredCert; d != nil {
+		return *d
+	}
+	return disconnect
+}
