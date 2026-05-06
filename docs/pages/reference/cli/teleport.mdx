@@ -92,7 +92,7 @@ Flags:
 
 |Flag|Default|Description|
 |---|---|---|
-|`-f`, `--format`|`text`|Format output (text, json, yaml).|
+|`-f`, `--format`|`text` (valid: `text`, `json`, `yaml`)|Format output (text, json, yaml).|
 
 Arguments:
 
@@ -114,7 +114,7 @@ Flags:
 
 |Flag|Default|Description|
 |---|---|---|
-|`-f`, `--format`|`text`|Format output (text, json, yaml).|
+|`-f`, `--format`|`text` (valid: `text`, `json`, `yaml`)|Format output (text, json, yaml).|
 
 Arguments:
 
@@ -159,7 +159,7 @@ Flags:
 |`--cert-file`|none|Path to a TLS certificate file for the proxy.|
 |`--cluster-name`|none|Unique cluster name, e.g. example.com.|
 |`--data-dir`|`/var/lib/teleport`|Path to a directory where Teleport keep its data.|
-|`--join-method`|`token`|Method to use to join the cluster (azure, azure_devops, bitbucket, circleci, ec2, gcp, github, gitlab, iam, kubernetes, spacelift, token, tpm, terraform_cloud, oracle, bound_keypair, env0)|
+|`--join-method`|`token` (valid: `azure`, `azure_devops`, `bitbucket`, `circleci`, `ec2`, `gcp`, `github`, `gitlab`, `iam`, `kubernetes`, `spacelift`, `token`, `tpm`, `terraform_cloud`, `oracle`, `bound_keypair`, `env0`)|Method to use to join the cluster.|
 |`--key-file`|none|Path to a TLS key file for the proxy.|
 |`--[no-]acme`|`false`|Get automatic certificate from Letsencrypt.org using ACME.|
 |`--node-labels`|none|Comma-separated list of labels to add to newly created nodes, for example env=staging,cloud=aws.|
@@ -328,7 +328,7 @@ Flags:
 |`--description`|none|Description of the proxied database.|
 |`--diag-addr`|none|Start diagnostic prometheus and healthz endpoint.|
 |`-d`, `--[no-]debug`|`false`|Enable verbose logging to stderr.|
-|`--gcp-alloydb-endpoint-type`|none|(Only for AlloyDB) Endpoint type. One of: \[public private psc\]|
+|`--gcp-alloydb-endpoint-type`|none (valid: `public`, `private`, `psc`)|(Only for AlloyDB) Endpoint type.|
 |`--gcp-instance-id`|none|(Only for Cloud SQL) Instance identifier.|
 |`--gcp-project-id`|none|(Only for Cloud SQL) Project identifier.|
 |`--labels`|none|Comma-separated list of labels for this node, for example env=dev,app=web.|
@@ -341,6 +341,16 @@ Flags:
 |`--protocol`|none|Proxied database protocol. Supported are: \[postgres mysql mongodb oracle cockroachdb redis snowflake sqlserver cassandra elasticsearch opensearch dynamodb clickhouse clickhouse-http spanner\].|
 |`--token`|none|Invitation token or path to file with token value to register with an auth server \[none\].|
 |`--uri`|none|Address the proxied database is reachable at.|
+
+## teleport debug check-session-helper
+
+Checks if the embedded session helper is working, if available in this build.
+
+Usage:
+
+```code
+$ teleport debug check-session-helper
+```
 
 ## teleport debug get-log-level
 
@@ -383,7 +393,7 @@ Arguments:
 
 |Argument|Default|Description|
 |---|---|---|
-|PROFILES|none (optional)|Comma-separated profile names to be exported. Supported profiles: allocs,block,cmdline,profile,trace,goroutine,heap,mutex,threadcreate. Default: goroutine,heap,profile|
+|PROFILES|none (optional)|Comma-separated profile names to be exported. Supported profiles: goroutine,heap,mutex,trace,cmdline,profile,threadcreate,allocs,block. Default: goroutine,heap,profile|
 
 ## teleport debug readyz
 
@@ -393,6 +403,17 @@ Usage:
 
 ```code
 $ teleport debug readyz
+```
+
+## teleport debug require-session-helper
+
+Checks if the embedded session helper is working, failing if not available in
+this build.
+
+Usage:
+
+```code
+$ teleport debug require-session-helper
 ```
 
 ## teleport debug set-log-level
@@ -771,7 +792,7 @@ Flags:
 |`--address`|none|Hostname or IP address of this OpenSSH node.|
 |`--data-dir`|`/var/lib/teleport`|Path to directory to store teleport data \[/var/lib/teleport\].|
 |`-d`, `--[no-]debug`|`false`|Enable verbose logging to stderr.|
-|`--join-method`|none|Method to use to join the cluster (token, iam, ec2).|
+|`--join-method`|none (valid: `token`, `iam`, `ec2`)|Method to use to join the cluster.|
 |`--labels`|none|Comma-separated list of labels for this OpenSSH node, for example env=dev,app=web.|
 |`--[no-]insecure`|`false`|Insecure mode disables certificate validation.|
 |`--[no-]restart-sshd`|`true`|Restart OpenSSH.|
@@ -801,7 +822,7 @@ Flags:
 |`--ca-pin`|none|Comma-separated list of SKPI hashes for the CA used to verify the auth server.|
 |`--cluster-name`|none|Unique cluster name, e.g. example.com.|
 |`--data-dir`|`/var/lib/teleport`|Path to a directory where Teleport keep its data.|
-|`--join-method`|`token`|Method to use to join the cluster (azure, azure_devops, bitbucket, circleci, ec2, gcp, github, gitlab, iam, kubernetes, spacelift, token, tpm, terraform_cloud, oracle, bound_keypair, env0)|
+|`--join-method`|`token` (valid: `azure`, `azure_devops`, `bitbucket`, `circleci`, `ec2`, `gcp`, `github`, `gitlab`, `iam`, `kubernetes`, `spacelift`, `token`, `tpm`, `terraform_cloud`, `oracle`, `bound_keypair`, `env0`)|Method to use to join the cluster.|
 |`--labels`|none|Comma-separated list of labels to add to newly created nodes ex) env=staging,cloud=aws.|
 |`--node-name`|none|Name for the Teleport node.|
 |`--[no-]silent`|`false`|Suppress user hint message.|
@@ -826,7 +847,7 @@ Flags:
 |Flag|Default|Description|
 |---|---|---|
 |`--advertise-ip`|none|IP to advertise to clients if running behind NAT|
-|`--apply-on-startup`|none|Path to a non-empty YAML file containing resources to apply on startup. Works on initialized clusters, unlike --bootstrap. Only supports the following kinds: \[user token cluster_networking_config cluster_auth_preference bot role, workload_identity\].|
+|`--apply-on-startup`|none|Path to a non-empty YAML file containing resources to apply on startup. Works on initialized clusters, unlike --bootstrap. Only supports the following kinds: \[bot role user token cluster_networking_config cluster_auth_preference workload_identity\].|
 |`--auth-server`|none|Address of the auth server \[127.0.0.1:3025\]|
 |`--bootstrap`|none|Path to a non-empty YAML file containing bootstrap resources (ignored if already initialized)|
 |`--ca-pin`|none|CA pin to validate the Auth Server (can be repeated for multiple pins)|

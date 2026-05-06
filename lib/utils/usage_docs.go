@@ -26,6 +26,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -185,20 +186,33 @@ func sortCommandsByName(cmds []*kingpin.CmdModel) []*kingpin.CmdModel {
 
 // formatDefaultFlagValue returns the default value of flag to display in a
 // table of flags. Assumes that a Boolean flag is false unless it is true by
-// default.
+// default. If the flag is an enum, includes the valid enum options.
 func formatDefaultFlagValue(flag *kingpin.FlagModel) string {
+	var defaultValue string
+
 	switch {
 	case len(flag.Default) == 0 && flag.IsBoolFlag():
-		return "`false`"
+		defaultValue = "`false`"
 	case len(flag.Default) > 0:
 		ret := make([]string, len(flag.Default))
 		for i, v := range flag.Default {
 			ret[i] = fmt.Sprintf("`%v`", v)
 		}
-		return strings.Join(ret, ",")
+		defaultValue = strings.Join(ret, ",")
 	default:
-		return "none"
+		defaultValue = "none"
 	}
+
+	// If this is an enum flag, append the valid options
+	if options := getEnumOptions(flag.Value); len(options) > 0 {
+		optionsFormatted := make([]string, len(options))
+		for i, opt := range options {
+			optionsFormatted[i] = fmt.Sprintf("`%s`", opt)
+		}
+		defaultValue += fmt.Sprintf(" (valid: %s)", strings.Join(optionsFormatted, ", "))
+	}
+
+	return defaultValue
 }
 
 // formatDefaultArgValue returns the default value of arg to display in a table
@@ -227,6 +241,45 @@ func formatDefaultArgValue(arg *kingpin.ArgModel) string {
 // type in github.com/alecthomas/kingpin/v2.
 type repeatableFlag interface {
 	IsCumulative() bool
+}
+
+// enumFlag is an interface for flags that have enum values. We use reflection
+// to access the options field since kingpin doesn't export an interface for this.
+type enumFlag interface {
+	String() string
+	Set(string) error
+}
+
+// getEnumOptions extracts the enum options from a kingpin Value using reflection.
+// Returns nil if the value is not an enum type or if options cannot be extracted.
+func getEnumOptions(value kingpin.Value) []string {
+	if value == nil {
+		return nil
+	}
+
+	// Get the reflect value
+	v := reflect.ValueOf(value)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	// Check if it's a struct with an "options" field
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	optionsField := v.FieldByName("options")
+	if !optionsField.IsValid() || optionsField.Kind() != reflect.Slice {
+		return nil
+	}
+
+	// Extract the slice values
+	options := make([]string, optionsField.Len())
+	for i := 0; i < optionsField.Len(); i++ {
+		options[i] = optionsField.Index(i).String()
+	}
+
+	return options
 }
 
 // formatUsageArg prints a command argument to include in a usage snippet.
