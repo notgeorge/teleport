@@ -26,14 +26,14 @@ import (
 
 	"github.com/gravitational/trace"
 	"golang.org/x/crypto/ssh"
-	"google.golang.org/protobuf/proto"
 
-	authproto "github.com/gravitational/teleport/api/client/proto"
+	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/utils/keys"
 	"github.com/gravitational/teleport/api/utils/sshutils"
 	"github.com/gravitational/teleport/lib/authz"
 	"github.com/gravitational/teleport/lib/cryptosuites"
+	"github.com/gravitational/teleport/lib/scopes/pinning"
 	"github.com/gravitational/teleport/lib/sshca"
 )
 
@@ -48,7 +48,7 @@ type AuthProvider interface {
 // be connected to the same cluster as the target node that this certificate
 // will be generated to authenticate to.
 type CertGenerator interface {
-	GenerateOpenSSHCert(ctx context.Context, req *authproto.OpenSSHCertRequest) (*authproto.OpenSSHCert, error)
+	GenerateOpenSSHCert(ctx context.Context, req *proto.OpenSSHCertRequest) (*proto.OpenSSHCert, error)
 }
 
 // LocalAccessPoint should be a cache of the local cluster auth preference.
@@ -82,7 +82,7 @@ func SignerFromSSHIdentity(ident *sshca.Identity, authClient AuthProvider, certG
 
 		var scopePinBytes []byte
 		if ident.ScopePin != nil {
-			scopePinBytes, err = proto.Marshal(ident.ScopePin)
+			scopePinBytes, err = pinning.EncodeToBytes(ident.ScopePin)
 			if err != nil {
 				return nil, trace.Wrap(err, "marshaling scope pin")
 			}
@@ -158,7 +158,7 @@ func signerFromIdentity(user types.User, identityGetter authz.IdentityGetter, au
 		// be propagated to the auth server for building the scoped access checker.
 		var scopePinBytes []byte
 		if identity.ScopePin != nil {
-			scopePinBytes, err = proto.Marshal(identity.ScopePin)
+			scopePinBytes, err = pinning.EncodeToBytes(identity.ScopePin)
 			if err != nil {
 				return nil, trace.Wrap(err, "marshaling scope pin")
 			}
@@ -225,11 +225,11 @@ func createAuthSigner(ctx context.Context, params certParams, localAccessPoint L
 	}
 
 	// sign new public key with OpenSSH CA
-	req := &authproto.OpenSSHCertRequest{
+	req := &proto.OpenSSHCertRequest{
 		User:      params.teleportUser,
 		Roles:     params.roles,
 		PublicKey: priv.MarshalSSHPublicKey(),
-		TTL:       authproto.Duration(params.ttl),
+		TTL:       proto.Duration(params.ttl),
 		Cluster:   params.clusterName,
 		ScopePin:  params.scopePin,
 		Login:     params.login,

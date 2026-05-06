@@ -46,7 +46,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/metadata"
-	goproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/gravitational/teleport"
@@ -90,6 +89,7 @@ import (
 	"github.com/gravitational/teleport/lib/itertools/stream"
 	"github.com/gravitational/teleport/lib/modules"
 	"github.com/gravitational/teleport/lib/modules/modulestest"
+	"github.com/gravitational/teleport/lib/scopes/pinning"
 	"github.com/gravitational/teleport/lib/service/servicecfg"
 	"github.com/gravitational/teleport/lib/services"
 	"github.com/gravitational/teleport/lib/services/local"
@@ -3068,7 +3068,7 @@ func TestGenerateOpenSSHCertScoped(t *testing.T) {
 		assert.NotNil(ct, pin.GetAssignmentTree())
 	}, 15*time.Second, 100*time.Millisecond)
 
-	pinBytes, err := goproto.Marshal(pin)
+	pinBytes, err := pinning.EncodeToBytes(pin)
 	require.NoError(t, err)
 
 	t.Run("valid login in principals", func(t *testing.T) {
