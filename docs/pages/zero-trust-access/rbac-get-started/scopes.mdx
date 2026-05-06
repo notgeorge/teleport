@@ -149,6 +149,9 @@ version: v1
 EOF
 ```
 
+Note that the `kube` configuration block does not yet support configuring
+`kubernetes_resources`.
+
 Next, create a scoped role assignment to grant `example-admin` to the user
 who will become the scoped admin (replace `alice` with your user):
 
@@ -173,6 +176,10 @@ under `/examples` and provides a guardrail against `alice` accidentally
 editing her own admin role and locking herself out.
 
 ## Joining a scoped SSH Service
+
+Only static Kubernetes clusters support joining with scopes. Dynamic
+cluster registration, including those discovered by the Teleport Discovery
+Service, dot not yet support scopes.
 
 Log the scoped admin into the desired scope:
 
