@@ -63,6 +63,10 @@ export interface DesktopSessionProps {
   client: TdpClient;
   /** Desktop name for display purposes. */
   desktop: string;
+  aclAttempt: Attempt<{
+    clipboardSharingEnabled: boolean;
+    directorySharingEnabled: boolean;
+  }>;
   /** Determines if the browser client support directory and clipboard sharing. */
   browserSupportsSharing: boolean;
   /**
@@ -71,10 +75,6 @@ export interface DesktopSessionProps {
    * Provides a callback to retry the connection.
    */
   customConnectionState?(args: { retry(): void }): React.ReactElement;
-  aclAttempt: Attempt<{
-    clipboardSharingEnabled: boolean;
-    directorySharingEnabled: boolean;
-  }>;
   hasAnotherSession(): Promise<boolean>;
   /**
    * Keyboard layout identifier for desired layout on remote session
@@ -369,6 +369,12 @@ export function DesktopSession({
     e.preventDefault();
   }
 
+  function handleCtrlAltDel() {
+    client.sendKeyboardInput('ControlLeft', ButtonState.DOWN);
+    client.sendKeyboardInput('AltLeft', ButtonState.DOWN);
+    client.sendKeyboardInput('Delete', ButtonState.DOWN);
+  }
+
   /** Cleans attempts to rerun effects. */
   const onRetry = async () => {
     setTdpConnectionStatus({ status: '' });
@@ -381,12 +387,6 @@ export function DesktopSession({
     tdpConnectionStatus,
     customConnectionState?.({ retry: onRetry })
   );
-
-  function handleCtrlAltDel() {
-    client.sendKeyboardInput('ControlLeft', ButtonState.DOWN);
-    client.sendKeyboardInput('AltLeft', ButtonState.DOWN);
-    client.sendKeyboardInput('Delete', ButtonState.DOWN);
-  }
 
   const controlsProps: DesktopSessionControlsRenderProps = {
     canShareDirectory: directorySharingPossible(directorySharingState),
