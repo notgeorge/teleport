@@ -30,6 +30,7 @@ import (
 	headerv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/header/v1"
 	"github.com/gravitational/teleport/api/types"
 	"github.com/gravitational/teleport/api/utils/clientutils"
+	"github.com/gravitational/teleport/lib/backend"
 	"github.com/gravitational/teleport/lib/itertools/stream"
 	"github.com/gravitational/teleport/lib/services"
 )
@@ -166,6 +167,7 @@ func (c *Cache) RangeDatabases(ctx context.Context, start, end string) iter.Seq2
 type databaseServerIndex string
 
 const databaseServerNameIndex databaseServerIndex = "name"
+const databaseServerDatabaseNameIndex databaseServerIndex = "database_name"
 
 func newDatabaseServerCollection(p services.Presence, w types.WatchKind) (*collection[types.DatabaseServer, databaseServerIndex], error) {
 	if p == nil {
@@ -179,6 +181,9 @@ func newDatabaseServerCollection(p services.Presence, w types.WatchKind) (*colle
 			map[databaseServerIndex]func(types.DatabaseServer) string{
 				databaseServerNameIndex: func(u types.DatabaseServer) string {
 					return u.GetHostID() + "/" + u.GetName()
+				},
+				databaseServerDatabaseNameIndex: func(u types.DatabaseServer) string {
+					return u.GetDatabase().GetName() + "/" + u.GetHostID() + "/" + u.GetName()
 				},
 			}),
 		fetcher: func(ctx context.Context, loadSecrets bool) ([]types.DatabaseServer, error) {
@@ -218,6 +223,38 @@ func (c *Cache) GetDatabaseServers(ctx context.Context, namespace string, opts .
 
 	out := make([]types.DatabaseServer, 0, rg.store.len())
 	for ds := range rg.store.resources(databaseServerNameIndex, "", "") {
+		out = append(out, ds.Copy())
+	}
+
+	return out, nil
+}
+
+// GetDatabaseServersByDatabaseName returns all registered database proxy servers for a given database name.
+func (c *Cache) GetDatabaseServersByDatabaseName(ctx context.Context, namespace, databaseName string, opts ...services.MarshalOption) ([]types.DatabaseServer, error) {
+	ctx, span := c.Tracer.Start(ctx, "cache/GetDatabaseServersByDatabaseName")
+	defer span.End()
+
+	if namespace == "" {
+		return nil, trace.BadParameter("missing database server namespace")
+	}
+	if databaseName == "" {
+		return nil, trace.BadParameter("missing database name")
+	}
+
+	rg, err := acquireReadGuard(c, c.collections.dbServers)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	defer rg.Release()
+
+	if !rg.ReadCache() {
+		servers, err := c.Config.Presence.GetDatabaseServersByDatabaseName(ctx, namespace, databaseName, opts...)
+		return servers, trace.Wrap(err)
+	}
+
+	prefix := databaseName + "/"
+	var out []types.DatabaseServer
+	for ds := range rg.store.resources(databaseServerDatabaseNameIndex, prefix, backend.RangeEnd(backend.KeyFromString(prefix)).String()) {
 		out = append(out, ds.Copy())
 	}
 

@@ -1055,6 +1055,42 @@ func (s *PresenceService) GetDatabaseServers(ctx context.Context, namespace stri
 	return servers, nil
 }
 
+// GetDatabaseServersByDatabaseName returns all registered database proxy servers for a given database name.
+func (s *PresenceService) GetDatabaseServersByDatabaseName(ctx context.Context, namespace, databaseName string, opts ...services.MarshalOption) ([]types.DatabaseServer, error) {
+	if namespace == "" {
+		return nil, trace.BadParameter("missing database server namespace")
+	}
+	if databaseName == "" {
+		return nil, trace.BadParameter("missing database name")
+	}
+
+	var servers []types.DatabaseServer
+	startKey := backend.ExactKey(dbServersPrefix, namespace)
+	endKey := backend.RangeEnd(startKey)
+	items := s.Backend.Items(ctx, backend.ItemsParams{
+		StartKey: startKey,
+		EndKey:   endKey,
+	})
+	for item, err := range items {
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		server, err := services.UnmarshalDatabaseServer(
+			item.Value,
+			services.AddOptions(opts,
+				services.WithExpires(item.Expires),
+				services.WithRevision(item.Revision))...)
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+		if server.GetDatabase().GetName() == databaseName {
+			servers = append(servers, server)
+		}
+	}
+
+	return servers, nil
+}
+
 // UpsertDatabaseServer registers new database proxy server.
 func (s *PresenceService) UpsertDatabaseServer(ctx context.Context, server types.DatabaseServer) (*types.KeepAlive, error) {
 	if err := services.CheckAndSetDefaults(server); err != nil {

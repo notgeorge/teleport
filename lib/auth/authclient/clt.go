@@ -519,6 +519,11 @@ func (c *Client) GetDatabaseServers(ctx context.Context, namespace string, opts 
 	return c.APIClient.GetDatabaseServers(ctx, namespace)
 }
 
+// GetDatabaseServersByDatabaseName not implemented: can only be called locally.
+func (c *Client) GetDatabaseServersByDatabaseName(ctx context.Context, namespace, databaseName string, opts ...services.MarshalOption) ([]types.DatabaseServer, error) {
+	return nil, trace.NotImplemented(notImplementedMessage)
+}
+
 // UpsertSnowflakeSession not implemented: can only be called locally.
 func (c *Client) UpsertSnowflakeSession(_ context.Context, _ types.WebSession) error {
 	return trace.NotImplemented(notImplementedMessage)

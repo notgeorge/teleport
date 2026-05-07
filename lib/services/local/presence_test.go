@@ -242,6 +242,80 @@ func TestDatabaseServersCRUD(t *testing.T) {
 	require.Empty(t, out)
 }
 
+func mustCreateDatabaseServer(t *testing.T, dbName string) types.DatabaseServer {
+	t.Helper()
+
+	databaseServer, err := types.NewDatabaseServerV3(types.Metadata{
+		Name: dbName,
+	}, types.DatabaseServerSpecV3{
+		HostID:   uuid.New().String(),
+		Hostname: "_",
+		Database: mustCreateDatabase(t, dbName, "postgresql", "localhost"),
+	})
+	require.NoError(t, err)
+	return databaseServer
+}
+
+func TestGetDatabaseServersByDatabaseName(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	backend, err := memory.New(memory.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = backend.Close() })
+
+	presence := NewPresenceService(backend)
+
+	t.Run("ParameterValidation", func(t *testing.T) {
+		_, err := presence.GetDatabaseServersByDatabaseName(ctx, "", "foo")
+		require.ErrorAs(t, err, new(*trace.BadParameterError))
+
+		_, err = presence.GetDatabaseServersByDatabaseName(ctx, apidefaults.Namespace, "")
+		require.ErrorAs(t, err, new(*trace.BadParameterError))
+	})
+
+	server1 := mustCreateDatabaseServer(t, "shared-db")
+	server2 := mustCreateDatabaseServer(t, "shared-db")
+	server3 := mustCreateDatabaseServer(t, "standalone-db")
+
+	for _, server := range []types.DatabaseServer{server1, server2, server3} {
+		_, err := presence.UpsertDatabaseServer(ctx, server)
+		require.NoError(t, err)
+	}
+
+	t.Run("MultipleServersSameDatabase", func(t *testing.T) {
+		servers, err := presence.GetDatabaseServersByDatabaseName(ctx, apidefaults.Namespace, "shared-db")
+		require.NoError(t, err)
+		require.Len(t, servers, 2)
+		for _, s := range servers {
+			require.Equal(t, "shared-db", s.GetDatabase().GetName())
+		}
+	})
+
+	t.Run("SingleServerForDatabase", func(t *testing.T) {
+		servers, err := presence.GetDatabaseServersByDatabaseName(ctx, apidefaults.Namespace, "standalone-db")
+		require.NoError(t, err)
+		require.Len(t, servers, 1)
+		require.Equal(t, "standalone-db", servers[0].GetDatabase().GetName())
+	})
+
+	t.Run("NoServersForDatabase", func(t *testing.T) {
+		servers, err := presence.GetDatabaseServersByDatabaseName(ctx, apidefaults.Namespace, "nonexistent-db")
+		require.NoError(t, err)
+		require.Empty(t, servers)
+	})
+
+	t.Run("DeletedServersNotReturned", func(t *testing.T) {
+		err := presence.DeleteDatabaseServer(ctx, server1.GetNamespace(), server1.GetHostID(), server1.GetName())
+		require.NoError(t, err)
+
+		servers, err := presence.GetDatabaseServersByDatabaseName(ctx, apidefaults.Namespace, "shared-db")
+		require.NoError(t, err)
+		require.Len(t, servers, 1)
+		require.Equal(t, server2.GetHostID(), servers[0].GetHostID())
+	})
+}
+
 func TestNodeCRUD(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

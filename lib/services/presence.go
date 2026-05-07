@@ -155,6 +155,8 @@ type Presence interface {
 
 	// GetDatabaseServers returns all registered database proxy servers.
 	GetDatabaseServers(context.Context, string, ...MarshalOption) ([]types.DatabaseServer, error)
+	// GetDatabaseServersByDatabaseName returns all registered database proxy servers for a given database name.
+	GetDatabaseServersByDatabaseName(ctx context.Context, namespace, databaseName string, opts ...MarshalOption) ([]types.DatabaseServer, error)
 	// UpsertDatabaseServer creates or updates a new database proxy server.
 	UpsertDatabaseServer(context.Context, types.DatabaseServer) (*types.KeepAlive, error)
 	// DeleteDatabaseServer removes the specified database proxy server.
