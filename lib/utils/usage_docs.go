@@ -35,6 +35,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DocsMode is true when building with -tags docs.
+const DocsMode = true
+
 var nonLetters = regexp.MustCompile(`\W`)
 
 // lowerWordChars returns only the word characters (\w) from in, in lowercase,

@@ -957,7 +957,7 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 		fmt.Sprintf("Verbose logging to the unified logging system. This flag implies --debug. Also available through the %s env var. More details see https://goteleport.com/docs/connect-your-client/tsh/#debug-logs.",
 			osLogEnvVar)).
 		IsSetByUser(&cf.OSLogSetByUser)
-	if runtime.GOOS != constants.DarwinOS {
+	if runtime.GOOS != constants.DarwinOS && !utils.DocsMode {
 		osLogFlag.Hidden()
 	}
 	osLogFlag.BoolVar(&cf.OSLog)
